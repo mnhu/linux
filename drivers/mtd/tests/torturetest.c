@@ -32,6 +32,7 @@
 #include <linux/mtd/mtd.h>
 #include <linux/slab.h>
 #include <linux/sched.h>
+#include <linux/delay.h>
 #include "mtd_test.h"
 
 #define RETRIES 3
@@ -65,6 +66,11 @@ module_param(cycles_count, uint, S_IRUGO);
 MODULE_PARM_DESC(cycles_count, "how many erase cycles to do "
 			       "(infinite by default)");
 
+static unsigned long cycle_period;
+module_param(cycle_period, ulong, S_IRUGO);
+MODULE_PARM_DESC(cycle_period, "Delay between cycles in milliseconds"
+			       "(0 by default)");
+
 static struct mtd_info *mtd;
 
 /* This buffer contains 0x555555...0xAAAAAA... pattern */
@@ -80,6 +86,7 @@ static unsigned int erase_cycles;
 
 static int pgsize;
 static struct timeval start, finish;
+static unsigned long cycle_start, cycle_finish;
 
 static void report_corrupt(unsigned char *read, unsigned char *written);
 
@@ -260,6 +267,11 @@ static int __init tort_init(void)
 		goto out;
 
 	start_timing();
+	if (cycle_period) {
+		cycle_period = msecs_to_jiffies(cycle_period);
+		cycle_start = jiffies;
+	}
+
 	while (1) {
 		int i;
 		void *patt;
@@ -318,7 +330,7 @@ static int __init tort_init(void)
 
 		erase_cycles += 1;
 
-		if (erase_cycles % gran == 0) {
+		if (erase_cycles % gran == 0 && !cycle_period) {
 			long ms;
 
 			stop_timing();
@@ -332,6 +344,32 @@ static int __init tort_init(void)
 
 		if (!infinite && --cycles_count == 0)
 			break;
+
+		/* Delay torture cycle */
+		if (cycle_period) {
+			long j;
+			cycle_finish = jiffies;
+			j = cycle_finish - cycle_start;
+			if (j < cycle_period) {
+				pr_info("%08u erase cycle done,"
+					" took %u milliseconds, "
+					"sleep %u ms\n",
+					1, jiffies_to_msecs(j),
+					jiffies_to_msecs(cycle_period-j));
+
+				schedule_timeout_interruptible(cycle_period-j);
+				cycle_start = cycle_finish + cycle_period-j;
+			} else {
+				pr_info("%08u erase cycle done,"
+					" took %u milliseconds, "
+					"cycle_period %u ms is smaller,"
+					" not sleeping\n",
+					1, jiffies_to_msecs(j),
+					jiffies_to_msecs(cycle_period));
+
+				cycle_start = jiffies;
+			}
+		}
 	}
 out:
 
