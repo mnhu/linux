@@ -1,3 +1,4 @@
+obj-$(CONFIG_MTD_TESTS) += mtd_pattern.o
 obj-$(CONFIG_MTD_TESTS) += mtd_oobtest.o
 obj-$(CONFIG_MTD_TESTS) += mtd_pagetest.o
 obj-$(CONFIG_MTD_TESTS) += mtd_readtest.o
