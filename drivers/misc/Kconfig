@@ -10,6 +10,25 @@ config SENSORS_LIS3LV02D
 	select INPUT_POLLDEV
 	default n
 
+config MPC8xxx_RSTE
+	bool "MPC8xxx reset events driver"
+	depends on PPC_MPC831x
+	default n
+	help
+	  This option enables device driver support for reset events
+	  from the RSR of Freescale MPC8xxx CPUs.
+
+	  Board integration allows detection of Linux panic resets and
+	  other kernel originated resets.
+
+	  Driver integration current includes the Appliance Watchdog
+	  framework, which provides detection of which appwd timeouts
+	  were involved in a reset.
+
+	  If you enable the knvram driver and configures a knvram
+	  partition named "mpc8xxx_rste", counters for the different
+	  reset events will be maintained.
+
 config AD525X_DPOT
 	tristate "Analog Devices Digital Potentiometers"
 	depends on (I2C || SPI) && SYSFS
