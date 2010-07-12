@@ -1,0 +1,162 @@
+The Appliance Watchdog framework and API
+
+Copyright 2010 DoréDevelopment ApS
+Author: Esben Haabendal <eha@doredevelopment.dk>
+
+
+
+Introduction:
+
+The mpc8xxx_rste driver provides improved access to the reset event
+bits of the reset status register (RSR) of MPC8xxx CPUs.
+
+The RSR is augmented with software assisted reset cause information,
+currently supporting U-Boot reset, Linux reset, Linux panic and
+Appliance Watchdog framework related reset causes.
+
+This driver depends on the kernel NVRAM driver (knvram), which is used
+to store the reset cause information as well as all the reset counters
+and a few additional bits.
+
+The information is provided to user-space via a procfs file and sysfs
+attributes.
+
+
+Procfs API
+
+The /proc/mpc8xxx_rste file prints outs something like
+
+~ # cat /proc/mpc8xxx_rste 
+app_timeout_reset
+coldstart          = 1 / 1
+boot_timeout_reset = 0 / 0
+app_timeout_reset  = 2 / 2
+reboot_timeout     = 0 / 0
+linux_reset        = 7 / 9
+linux_panic        = 0 / 0
+uboot_reset        = 5 / 6
+wdt_reset          = 0 / 0
+checkstop_reset    = 0 / 0
+busmonitor_reset   = 0 / 0
+jtag_hreset        = 0 / 0
+jtag_sreset        = 0 / 0
+hw_hreset          = 0 / 0
+hw_sreset          = 0 / 0
+sw_hreset          = 0 / 0
+sw_sreset          = 0 / 0
+unknown_reset      = 0 / 0
+invalid_cause      = 0 / 0
+
+The first line prints out the current reset event(s), ie. the reason
+for the system to coming up this time.
+
+The remaining lines prints out counters for each possible reset
+event. The first value is number of times the event has occured since
+last coldstart. The second value is the total number of times the
+event has occured (since last clearing the counters).
+
+
+Sysfs API
+
+The /sys/class/misc/mpc8xxx_rste/ folder contains attributes for the
+same information as described above, through a number of simple
+attributes.
+
+The counters are provided with the following attributes:
+
+/sys/class/misc/mpc8xxx_rste/app_timeout_reset
+/sys/class/misc/mpc8xxx_rste/boot_timeout_reset
+/sys/class/misc/mpc8xxx_rste/busmonitor_reset
+/sys/class/misc/mpc8xxx_rste/checkstop_reset
+/sys/class/misc/mpc8xxx_rste/coldstart
+/sys/class/misc/mpc8xxx_rste/hw_hreset
+/sys/class/misc/mpc8xxx_rste/hw_sreset
+/sys/class/misc/mpc8xxx_rste/jtag_hreset
+/sys/class/misc/mpc8xxx_rste/jtag_sreset
+/sys/class/misc/mpc8xxx_rste/linux_panic
+/sys/class/misc/mpc8xxx_rste/linux_reset
+/sys/class/misc/mpc8xxx_rste/reboot_timeout
+/sys/class/misc/mpc8xxx_rste/sw_hreset
+/sys/class/misc/mpc8xxx_rste/sw_sreset
+/sys/class/misc/mpc8xxx_rste/uboot_reset
+/sys/class/misc/mpc8xxx_rste/unknown_reset
+/sys/class/misc/mpc8xxx_rste/wdt_reset
+/sys/class/misc/mpc8xxx_rste/invalid_cause
+
+Reading the above files will give two decimal counters, corresponding
+to the number of the given reset event since last coldstart and total
+number of events (since last clearing the counters).
+
+The current reset event can be read out from the current attribute:
+
+/sys/class/misc/mpc8xxx_rste/current
+
+The counters can be cleared by writing to the clear attribute:
+
+/sys/class/misc/mpc8xxx_rste/clear
+
+Writing '0' (ASCII zero character) clears the counters for events
+since last coldstart, leaving the total counters untouched. Writing
+'1' clears both coldstart and total counters.
+
+
+Reset events
+
+coldstart
+	No reset information was available, so it must be a coldstart.
+
+uboot_reset
+	Reboot from U-Boot (ie. the U-Boot 'reset' command)
+
+linux_reset
+	Reboot from Linux (ie. Linux 'reboot' command or any other way
+	to get the Linux kernel to reboot the CPU)
+
+linux_panic
+	Linux kernel panic.
+
+boot_timeout_reset
+	The Appliance Watchdog failed to completes it's boot
+	initialization, and consequently rebooting the CPU
+
+app_timeout_reset
+	The Appliance Watchdog detected an application timeout,
+	leading to a reboot of the CPU
+
+reboot_timeout
+	The Appliance Watchdog timed out while trying to reboot the
+	board, leading to a forced reboot of the CPU
+
+wdt_reset
+	CPU was reset by a timeout of the internal watchdog timer of
+	the CPU (WDT)
+
+checkstop_reset
+	CPU was reset because of a checkstop error
+
+busmonitor_reset
+	CPU was reset because of a bus monitor error
+
+jtag_hreset
+	CPU was reset by a JTAG HRESET signal
+
+jtag_sreset
+	CPU was reset by a JTAG SRESET signal
+
+hw_hreset
+	CPU was reset by a hardware HRESET signal
+
+hw_sreset
+	CPU was reset by a hardware SRESET signal
+
+sw_hreset
+	CPU was reset by a software HRESET
+
+sw_sreset
+	CPU was reset by a software SRESET
+
+unknown_reset
+	U-Boot was not able to figure out the reason for the reset
+
+invalid_cause
+	U-Boot did not accept the reset augmentation (reset cause)
