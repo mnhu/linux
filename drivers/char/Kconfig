@@ -274,6 +274,8 @@ config NVRAM
 	  To compile this driver as a module, choose M here: the
 	  module will be called nvram.
 
+source "drivers/char/knvram/Kconfig"
+
 #
 # These legacy RTC drivers just cause too many conflicts with the generic
 # RTC framework ... let's not even try to coexist any more.

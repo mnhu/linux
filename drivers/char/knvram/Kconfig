@@ -1,0 +1,54 @@
+#
+# Kernel NVRAM configuration
+#
+
+menuconfig KNVRAM
+	tristate "Kernel-based NVRAM Support"
+	help
+	  If you say Y here, the kernel will be built with support for
+	  kernel-based NVRAM, providing in-kernel NVRAM devices.
+
+	  The knvram devices uses in-memory shadow images of backend
+	  images. The shadow image is loaded on initialization, and
+	  synchronized to backend on request, when closing an knvram
+	  device.  For improved reliability, board designers should
+	  add a small UPS and an NMI on power-failure, and synchronize
+	  knvram devices from the NMI.  See Documentation/knvram.txt
+	  for more information.
+
+	  Currently, knvram is only implemented for OpenFirmware
+	  targets, so is usable on PowerPC and other platforms
+	  supporting OpenFirmware.
+
+	  To actually use knvram, you must choose at least one knvram
+	  backend.
+
+	  If in doubt, 'N' is probably a safe choice here.
+
+if KNVRAM
+
+config KNVRAM_DEFAULT_PAGESIZE
+	int "Default pagesize for transaction copy-on-write"
+	default 128
+	help
+	  The default pagesize use for knvram partitions with
+	  transactions enabled.  You can override this per partition
+	  by providing a value to the 'transaction' property for the
+	  knvram partition in the device tree.
+
+	  The value must be a power-of-two value.
+
+config KNVRAM_NVRAM
+	bool "NVRAM backend"
+	depends on KNVRAM
+	help
+	  Support for using memory-mapped NVRAM like devices as
+	  backend for knvram, such as FRAM, MRAM, and so on.
+
+config KNVRAM_DEV
+	bool "Kernel NVRAM device interface"
+	depends on KNVRAM
+	help
+	  Support for user-space device access to knvram devices.
+
+endif # KNVRAM

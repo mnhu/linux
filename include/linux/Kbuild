@@ -229,6 +229,7 @@ header-y += kernel.h
 header-y += kernelcapi.h
 header-y += keyboard.h
 header-y += keyctl.h
+header-y += knvram.h
 header-y += l2tp.h
 header-y += limits.h
 header-y += llc.h
