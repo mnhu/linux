@@ -85,6 +85,8 @@
 #include <asm/smp.h>
 #endif
 
+#include <linux/appwd.h>
+
 static int kernel_init(void *);
 
 extern void init_IRQ(void);
@@ -819,6 +821,8 @@ static int __ref kernel_init(void *unused)
 	numa_default_policy();
 
 	flush_delayed_fput();
+
+	appwd_init_post_hook();
 
 	if (ramdisk_execute_command) {
 		if (!run_init_process(ramdisk_execute_command))
