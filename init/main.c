@@ -68,6 +68,7 @@
 #include <linux/shmem_fs.h>
 #include <linux/slab.h>
 #include <linux/perf_event.h>
+#include <linux/appwd.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -78,6 +79,7 @@
 #ifdef CONFIG_X86_LOCAL_APIC
 #include <asm/smp.h>
 #endif
+
 
 static int kernel_init(void *);
 
@@ -809,6 +811,8 @@ static noinline int init_post(void)
 
 
 	current->signal->flags |= SIGNAL_UNKILLABLE;
+
+	appwd_init_post_hook();
 
 	if (ramdisk_execute_command) {
 		run_init_process(ramdisk_execute_command);
