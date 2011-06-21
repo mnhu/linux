@@ -280,6 +280,7 @@ extern const char gfar_driver_version[];
 #define RCTRL_PRSDEP_MASK	0x000000c0
 #define RCTRL_PRSDEP_INIT	0x000000c0
 #define RCTRL_PRSFM		0x00000020
+#define RCTRL_BC_REJ		0x00000010
 #define RCTRL_PROM		0x00000008
 #define RCTRL_EMEN		0x00000002
 #define RCTRL_REQ_PARSER	(RCTRL_VLEX | RCTRL_IPCSEN | \
