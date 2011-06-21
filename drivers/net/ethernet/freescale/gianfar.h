@@ -1131,6 +1131,14 @@ struct gfar_private {
 	/*Filer table*/
 	unsigned int ftp_rqfpr[MAX_FILER_IDX + 1];
 	unsigned int ftp_rqfcr[MAX_FILER_IDX + 1];
+
+	/* Broadcast storm filter */
+	unsigned int bcrej_cnt;
+	unsigned int bcrej_ndx;
+	ktime_t *bcrej_time;
+	unsigned int bcrej_win;
+	struct delayed_work bcrej_work;
+	unsigned long bcrej_delay;
 };
 
 

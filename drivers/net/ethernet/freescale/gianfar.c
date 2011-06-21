@@ -225,6 +225,51 @@ static int gfar_init_bds(struct net_device *ndev)
 	return 0;
 }
 
+static void bcrej_enable(struct gfar_private *priv)
+{
+	struct gfar __iomem *regs = priv->gfargrp[0].regs;
+	u32 tempval;
+
+	/* Enable broadcast frame reject */
+	tempval = gfar_read(&regs->rctrl);
+	tempval |= RCTRL_BC_REJ;
+	gfar_write(&regs->rctrl, tempval);
+	pr_warning("%s: broadcast storm filter enabled", priv->ndev->name);
+}
+
+static void bcrej_disable(struct work_struct *work)
+{
+	struct gfar_private *priv = (struct gfar_private *)
+		container_of(to_delayed_work(work),
+			     struct gfar_private, bcrej_work);
+	struct gfar __iomem *regs = priv->gfargrp[0].regs;
+	u32 tempval;
+
+	/* Disable broadcast frame reject */
+	tempval = gfar_read(&regs->rctrl);
+	tempval &= ~RCTRL_BC_REJ;
+	gfar_write(&regs->rctrl, tempval);
+	pr_info("%s: broadcast storm filter disabled", priv->ndev->name);
+}
+
+static int bcrej_init(struct net_device *ndev)
+{
+	struct gfar_private *priv = netdev_priv(ndev);
+
+	if (!priv->bcrej_cnt || !priv->bcrej_win)
+		/* disabled */
+		return 0;
+	priv->bcrej_time = kzalloc(sizeof(*priv->bcrej_time)
+				   * priv->bcrej_cnt, GFP_KERNEL);
+	if (!priv->bcrej_time)
+		return -ENOMEM;
+	priv->bcrej_ndx = 0;
+	if (priv->bcrej_delay)
+		INIT_DELAYED_WORK(&priv->bcrej_work, bcrej_disable);
+
+	return 0;
+}
+
 static int gfar_alloc_skb_resources(struct net_device *ndev)
 {
 	void *vaddr;
@@ -626,6 +671,7 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 	const u32 *stash_idx;
 	unsigned int num_tx_qs, num_rx_qs;
 	u32 *tx_queues, *rx_queues;
+	u32 *bcrej_cnt, *bcrej_win, *bcrej_delay;
 
 	if (!np || !of_device_is_available(np))
 		return -ENODEV;
@@ -779,6 +825,16 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 
 	/* Find the TBI PHY.  If it's not there, we don't support SGMII */
 	priv->tbi_node = of_parse_phandle(np, "tbi-handle", 0);
+
+	bcrej_cnt = (u32 *)of_get_property(np, "deif,bcrej-count", NULL);
+	priv->bcrej_cnt = bcrej_cnt ? *bcrej_cnt : 0;
+	bcrej_win = (u32 *)of_get_property(np, "deif,bcrej-window", NULL);
+	priv->bcrej_win = bcrej_win ? *bcrej_win * 1000 : 0;
+	bcrej_delay = (u32 *)of_get_property(np, "deif,bcrej-delay", NULL);
+	if (bcrej_delay)
+		priv->bcrej_delay = DIV_ROUND_UP((*bcrej_delay * HZ), 1000);
+	else
+		priv->bcrej_delay = HZ;
 
 	return 0;
 
@@ -1926,6 +1982,10 @@ int startup_gfar(struct net_device *ndev)
 		gfar_write(&regs->imask, IMASK_INIT_CLEAR);
 	}
 
+	err = bcrej_init(ndev);
+	if (err)
+		return err;
+
 	regs= priv->gfargrp[0].regs;
 	err = gfar_alloc_skb_resources(ndev);
 	if (err)
@@ -2762,6 +2822,24 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 		struct sk_buff *newskb;
 
 		rmb();
+
+		/* Broadcast storm rejection filter */
+		if (unlikely((bdp->status & RXBD_BROADCAST)
+			     && priv->bcrej_time)) {
+			ktime_t now = ktime_get();
+			s64 delta;
+			priv->bcrej_time[priv->bcrej_ndx++] = now;
+			if (unlikely(priv->bcrej_ndx == priv->bcrej_cnt))
+				priv->bcrej_ndx = 0;
+			delta = ktime_us_delta(
+				now, priv->bcrej_time[priv->bcrej_ndx]);
+			if (delta < priv->bcrej_win) {
+				bcrej_enable(priv);
+				/* Schedule re-enable work */
+				schedule_delayed_work(&priv->bcrej_work,
+						      priv->bcrej_delay);
+			}
+		}
 
 		/* Add another skb for the future */
 		newskb = gfar_new_skb(dev);
