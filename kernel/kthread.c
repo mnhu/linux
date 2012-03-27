@@ -583,6 +583,43 @@ bool queue_kthread_work(struct kthread_worker *worker,
 }
 EXPORT_SYMBOL_GPL(queue_kthread_work);
 
+static void delayed_kthread_work_timer_fn(unsigned long __data)
+{
+	struct delayed_kthread_work *dwork =
+		(struct delayed_kthread_work *)__data;
+	int ret;
+	ret = queue_kthread_work(dwork->worker, &dwork->work);
+	BUG_ON(ret != true);
+}
+
+bool queue_delayed_kthread_work(struct kthread_worker *worker,
+				struct delayed_kthread_work *dwork,
+				unsigned long delay)
+{
+	int ret = false;
+	unsigned long flags;
+	struct timer_list *timer = &dwork->timer;
+	struct kthread_work *work = &dwork->work;
+
+	spin_lock_irqsave(&worker->lock, flags);
+	if (list_empty(&work->node)) {
+		BUG_ON(timer_pending(timer));
+
+		dwork->worker = worker;
+		timer_stats_timer_set_start_info(&dwork->timer);
+
+		timer->expires = jiffies + delay;
+		timer->data = (unsigned long)dwork;
+		timer->function = delayed_kthread_work_timer_fn;
+		add_timer(timer);
+
+		ret = true;
+	}
+	spin_unlock_irqrestore(&worker->lock, flags);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(queue_delayed_kthread_work);
+
 struct kthread_flush_work {
 	struct kthread_work	work;
 	struct completion	done;
@@ -653,3 +690,20 @@ void flush_kthread_worker(struct kthread_worker *worker)
 	wait_for_completion(&fwork.done);
 }
 EXPORT_SYMBOL_GPL(flush_kthread_worker);
+
+bool cancel_delayed_kthread_work_sync(struct delayed_kthread_work *dwork)
+{
+	int ret;
+	unsigned long flags;
+	struct kthread_worker *worker = dwork->worker;
+	struct kthread_work *work = &dwork->work;
+
+	spin_lock_irqsave(&worker->lock, flags);
+	ret = del_timer(&dwork->timer);
+	if (!ret)
+		ret = !list_empty(&work->node);
+	flush_kthread_work(work);
+	spin_unlock_irqrestore(&worker->lock, flags);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(cancel_delayed_kthread_work_sync);

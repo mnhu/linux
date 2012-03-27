@@ -3,6 +3,7 @@
 /* Simple interface for creating and stopping kernel threads without mess. */
 #include <linux/err.h>
 #include <linux/sched.h>
+#include <linux/timer.h>
 
 __printf(4, 5)
 struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
@@ -77,6 +78,12 @@ struct kthread_work {
 	struct kthread_worker	*worker;
 };
 
+struct delayed_kthread_work {
+	struct kthread_work	work;
+	struct timer_list	timer;
+	struct kthread_worker	*worker;
+};
+
 #define KTHREAD_WORKER_INIT(worker)	{				\
 	.lock = __SPIN_LOCK_UNLOCKED((worker).lock),			\
 	.work_list = LIST_HEAD_INIT((worker).work_list),		\
@@ -130,10 +137,21 @@ extern void __init_kthread_worker(struct kthread_worker *worker,
 		init_waitqueue_head(&(work)->done);			\
 	} while (0)
 
+#define init_delayed_kthread_work(dwork, fn)				\
+	do {								\
+		init_kthread_work(&(dwork)->work, fn);			\
+		init_timer_on_stack(&(dwork)->timer);			\
+		(dwork)->worker = NULL;					\
+	} while (0)
+
 int kthread_worker_fn(void *worker_ptr);
 
 bool queue_kthread_work(struct kthread_worker *worker,
 			struct kthread_work *work);
+bool queue_delayed_kthread_work(struct kthread_worker *worker,
+				struct delayed_kthread_work *dwork,
+				unsigned long delay);
+bool cancel_delayed_kthread_work_sync(struct delayed_kthread_work *dwork);
 void flush_kthread_work(struct kthread_work *work);
 void flush_kthread_worker(struct kthread_worker *worker);
 
