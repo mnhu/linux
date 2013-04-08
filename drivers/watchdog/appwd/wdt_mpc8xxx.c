@@ -19,9 +19,11 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/init.h>
-#include <linux/of_platform.h>
+#include <linux/platform_device.h>
+#include <linux/of.h>
 #include <linux/io.h>
 #include <sysdev/fsl_soc.h>
 
@@ -44,9 +46,7 @@ struct mpc8xxx_wdt {
 };
 static struct mpc8xxx_wdt __iomem *wd_base;
 
-struct mpc8xxx_wdt_type {
-	int prescaler;
-};
+#define MPC8XXX_WDT_TYPE_PRESCALER 0x10000
 
 /*
  * We always prescale, but if someone really doesn't want to they can set this
@@ -81,12 +81,10 @@ static struct wdt_operations wdt_mpc8xxx_ops = {
 
 
 static int __devinit
-wdt_mpc8xxx_probe(struct platform_device *pdev,
-		  const struct of_device_id *match)
+wdt_mpc8xxx_probe(struct platform_device *pdev)
 {
 
 	struct device_node *np = pdev->dev.of_node;
-	struct mpc8xxx_wdt_type *wdt_type = match->data;
 	struct wdt_mpc8xxx_data * data;
 	u32 freq = fsl_get_sys_freq();
 	const u32 *val;
@@ -124,7 +122,7 @@ wdt_mpc8xxx_probe(struct platform_device *pdev,
 	}
 
 	if (prescale)
-		timeout = (data->timeout_ms * (freq / 1000)) / wdt_type->prescaler;
+		timeout = (data->timeout_ms * (freq / 1000)) / MPC8XXX_WDT_TYPE_PRESCALER;
 	else
 		timeout = (data->timeout_ms * (freq / 1000));
 
@@ -168,20 +166,15 @@ err_unmap:
 	return err;
 }
 
-static const struct of_device_id wdt_mpc8xxx_match[] = {
+static const struct of_device_id wdt_mpc8xxx_match[] __devinitdata = {
 	{
 		.compatible = "appwd-mpc8xxx",
-		.data = &(struct mpc8xxx_wdt_type) {
-			.prescaler = 0x10000,
-		},
-
 	},
 	{},
 };
 MODULE_DEVICE_TABLE(of, wdt_mpc8xxx_match);
 
-
-static struct of_platform_driver wdt_mpc8xxx_driver = {
+static struct platform_driver wdt_mpc8xxx_driver = {
 	.probe		= wdt_mpc8xxx_probe,
 	.driver = {
 		.name		= DRV_NAME,
@@ -193,7 +186,7 @@ static struct of_platform_driver wdt_mpc8xxx_driver = {
 static int __init wdt_mpc8xxx_init(void)
 {
 	pr_info("initializing appwd_mpc8xxx driver\n");
-	return of_register_platform_driver(&wdt_mpc8xxx_driver);
+	return platform_driver_register(&wdt_mpc8xxx_driver);
 }
 device_initcall(wdt_mpc8xxx_init);
 
