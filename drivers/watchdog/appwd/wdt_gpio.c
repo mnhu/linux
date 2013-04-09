@@ -30,7 +30,6 @@
 
 #define DRV_NAME "appwd_wdt_gpio"
 
-
 struct wdt_gpio_data {
 	unsigned gpio;
 	int level;
@@ -50,7 +49,7 @@ static struct wdt_operations wdt_gpio_ops = {
 	.keepalive	= wdt_gpio_keepalive,
 };
 
-static int __init
+static int __devinit
 wdt_gpio_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -173,7 +172,7 @@ appwd_wdt_register_failed:
 }
 
 
-static const struct of_device_id wdt_gpio_match[] = {
+static const struct of_device_id wdt_gpio_match[] __devinitdata = {
 	{
 		.compatible = "appwd-wdt-gpio",
 	},
@@ -181,8 +180,7 @@ static const struct of_device_id wdt_gpio_match[] = {
 };
 MODULE_DEVICE_TABLE(of, wdt_gpio_match);
 
-
-static struct platform_driver wdt_gpio_driver __initdata = {
+static struct platform_driver wdt_gpio_driver = {
 	.probe		= wdt_gpio_probe,
 	.driver = {
 		.name		= DRV_NAME,
