@@ -697,12 +697,28 @@ bool cancel_delayed_kthread_work_sync(struct delayed_kthread_work *dwork)
 	unsigned long flags;
 	struct kthread_worker *worker = dwork->worker;
 	struct kthread_work *work = &dwork->work;
+	struct kthread_flush_work fwork = {
+		KTHREAD_WORK_INIT(fwork.work, kthread_flush_work_fn),
+		COMPLETION_INITIALIZER_ONSTACK(fwork.done),
+	};
+
+	bool noop = false;
 
 	spin_lock_irqsave(&worker->lock, flags);
 	ret = del_timer(&dwork->timer);
 	if (!ret)
 		ret = !list_empty(&work->node);
-	flush_kthread_work(work);
+
+	if (!list_empty(&work->node))
+		insert_kthread_work(worker, &fwork.work, work->node.next);
+	else if (worker->current_work == work)
+		insert_kthread_work(worker, &fwork.work, worker->work_list.next);
+	else
+		noop = true;
+
+	if (!noop)
+		wait_for_completion(&fwork.done);
+
 	spin_unlock_irqrestore(&worker->lock, flags);
 	return ret;
 }
