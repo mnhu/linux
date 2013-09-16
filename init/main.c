@@ -82,6 +82,7 @@
 #include <linux/proc_ns.h>
 #include <linux/io.h>
 #include <linux/appwd.h>
+#include <linux/watchdog.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -788,6 +789,8 @@ int __init_or_module do_one_initcall(initcall_t fn)
 
 	if (initcall_blacklisted(fn))
 		return -EPERM;
+
+	premature_watchdog_keepalive();
 
 	if (initcall_debug)
 		ret = do_one_initcall_debug(fn);
