@@ -1,0 +1,6 @@
+obj-$(CONFIG_KNVRAM)			+= knvram.o
+
+knvram-objs-$(CONFIG_KNVRAM_NVRAM)	+= nvram.o
+knvram-objs-$(CONFIG_KNVRAM_DEV)	+= dev.o
+
+knvram-objs				+= core.o $(knvram-objs-y)
