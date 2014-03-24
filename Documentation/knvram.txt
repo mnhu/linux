@@ -1,0 +1,129 @@
+The Linux knvram driver.
+
+Copyright 2010 Prevas A/S.
+
+
+Introduction:
+
+The knvram driver is a kernel-based approach to NVRAM. With knvram,
+the kernel is responsible for syncrhonization between the NVRAM
+backend image and the in-memory NVRAM shadow image.
+
+As such, it is by nature not truly non-volatile seen from a hardware
+point of view.  With proper integration, it can be seen as
+non-volatile from a software point of view.
+
+The knvram driver offers some advantages over hardware NVRAM.
+
+* Transaction support
+* Can use any non-volatile storage backend
+* Real-time performance
+* Partitioning support
+* Kernel and user-space API
+
+Transaction support:
+
+Multiple write()/lseek() operations can be merged into an atomic
+commit. It will either be written in it's entirety to NVRAM (shadow
+and backend image). Transactions can of-course be explicitely aborted.
+
+Can use any non-volatile storage backend:
+
+Any non-volatile storage can be implemented as a knvram
+backend. Currently, the only backend implementation is for memory
+mapped NVRAM like devices like FRAM, MRAM, and so on.
+
+A UBI backend should be added, so that knvram can be used without
+adding additional storage hardware.
+
+Real-time performance:
+
+Read and write to knvram devices only touches memory, so no slow
+external hardware should deteriorate real-time performance.
+
+Partitioning support:
+
+A single knvram backend can be partitioned into multiple knvram
+partitions, allowing multiple applications to share it without locking
+issues.
+
+
+Kernel API:
+
+All knvram devices can be accessed with the kvnram kernel API.
+
+* knvram_open()
+* knvram_close()
+* knvram_read()
+* knvram_write()
+* knvram_tbegin()
+* knvram_tcommit()
+* knvram_tabort()
+* knvram_sync()
+* knvram_setautot()
+
+The knvram_open(), knvram_close(), knvram_read(), and knvram_write()
+functions should do what you expect of them.  Each knvram partition
+enforces exclusive write access, but allows multiple readers
+(simultaneous with a writer).
+
+The knvram_tbegin() function marks the beginning of a transaction.
+
+The knvram_tcommit() function commits all writes to the shadow image
+since the last knvram_tbegin() call.
+
+The knvram_tabort() function reverts all writes since the last
+knvram_tbegin() call.
+
+While a transaction is active, reads from the handle where the
+transaction is active will reflect the writes in the transaction. All
+other handles will return data as if no writes has been done since the
+beginning of the transaction.  After knvram_tcommit() all handles will
+reflect the writes, and after knvram_abort() all handles will
+of-course not see the writes that has been reverted.
+
+The knvram_sync() function forces a synchronization of the shadow
+image to backend storage.
+
+The knvram_setautot() function can be used to enable/disable automatic
+transactions. With automatic transactions enabled, any write to a
+handle without an active transaction causes a new transaction to be
+started. No automatic commit will be done, so knvram_commit() might
+come in handy :-)
+
+
+User-space API:
+
+The knvram user-space API is a custom character device API. It is
+optional (CONFIG_KNVRAM_DEV), and when present, is enabled per
+partition.
+
+The following functions are supported:
+* open()
+* close()
+* ioctl()
+* read()
+* write()
+* lseek()
+* fsync()
+
+O_NONBLOCK and O_SYNC are supported.
+
+The following ioctl commands are provided:
+* KNVRAMIOC_SYNC - same as fsync().
+* KNVRAMIOC_TBEGIN - begin transaction.
+* KNVRAMIOC_TCOMMIT - commit transaction.
+* KNVRAMIOC_TABORT - abort transaction.
+* KNVRAMIOC_SETAUTOT - set automatic transaction enable/disable (0/1).
+* KNVRAMIOC_GETAUTOT - get automatic transaction enable/disable state.
+
+
+Hardware integration issues:
+
+For knvram to provider proper non-volatile devices, the hardware
+should provide an interrupt (preferably NMI) when on power-failure,
+and enough guaranteed UPS time for the NVRAM synchronization from
+shadow to backend image to be completed.
+
+The power-failure interrupt handler should call
+knvram_emergency_sync().
