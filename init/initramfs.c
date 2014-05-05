@@ -420,6 +420,7 @@ static int __init flush_buffer(void *bufv, unsigned len)
 static unsigned my_inptr;   /* index of next byte to be processed in inbuf */
 
 #include <linux/decompress/generic.h>
+#include <linux/watchdog.h>
 
 static char * __init unpack_to_rootfs(char *buf, unsigned len)
 {
@@ -440,6 +441,7 @@ static char * __init unpack_to_rootfs(char *buf, unsigned len)
 	message = NULL;
 	while (!message && len) {
 		loff_t saved_offset = this_header;
+		premature_watchdog_keepalive();
 		if (*buf == '0' && !(this_header & 3)) {
 			state = Start;
 			written = write_buffer(buf, len);
