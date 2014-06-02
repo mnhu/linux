@@ -8,3 +8,4 @@ obj-$(CONFIG_APPWD) += wdd.o
 obj-$(CONFIG_APPWD_WDT_MPC8xxx) += wdt_mpc8xxx.o
 obj-$(CONFIG_APPWD_WDT_GPIO) += wdt_gpio.o
 obj-$(CONFIG_APPWD_WDT_DUMMY) += wdt_dummy.o
+obj-$(CONFIG_APPWD_WDT_IMX2) += wdt_imx2.o

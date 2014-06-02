@@ -152,4 +152,12 @@ config APPWD_WDT_MPC8xxx
 	  This adds support for the integrated watchdog timer in
 	  Freescale MPC8xx, MPC83xx and MPC85xx processors.
 
+config APPWD_WDT_IMX2
+	bool " IMX Appliance Watchdog Timer support"
+	depends on !IMX2_WDT && ARCH_MXC
+	select APPWD_WDM
+	help
+	  This is the application driver for the hardware watchdog
+	  on the Freescale IMX2 and later processors.
+
 endif # APPWD
