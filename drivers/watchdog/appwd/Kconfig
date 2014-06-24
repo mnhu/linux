@@ -160,4 +160,12 @@ config APPWD_WDT_IMX2
 	  This is the application driver for the hardware watchdog
 	  on the Freescale IMX2 and later processors.
 
+config APPWD_WDT_OMAP
+        bool " OMAP Appliance Watchdog Timer support"
+        depends on !OMAP_WDT && (ARCH_OMAP16XX || ARCH_OMAP2PLUS)
+        select APPWD_WDM
+	help
+	  This is the application driver for the hardware watchdog
+	  on the OMAP16 and OMAP2PLUS processors.
+
 endif # APPWD
