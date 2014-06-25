@@ -392,10 +392,3 @@ knvram_dev_exit(void)
 	unregister_chrdev_region(MKDEV(major, first_minor),
 				 KNVRAM_MAX_PARTITIONS);
 }
-
-
-/*
- * Local Variables:
- * compile-command: "make -C ../../.. M=drivers/char/knvram dev.o"
- * End:
- */

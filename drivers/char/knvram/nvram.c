@@ -903,10 +903,3 @@ knvram_nvram_exit(void)
 	platform_driver_unregister(&knvram_nvram_of_driver);
 }
 module_exit(knvram_nvram_exit);
-
-
-/*
- * Local Variables:
- * compile-command: "make -C ../../.. M=drivers/char/knvram nvram.o"
- * End:
- */
