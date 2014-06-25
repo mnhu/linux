@@ -126,4 +126,4 @@ and enough guaranteed UPS time for the NVRAM synchronization from
 shadow to backend image to be completed.
 
 The power-failure interrupt handler should call
-knvram_emergency_sync().
+knvram_sync_all().
