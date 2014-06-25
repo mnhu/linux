@@ -753,7 +753,7 @@ knvram_sync(struct knvram_partition *p)
 }
 
 void
-knvram_flush(void)
+knvram_sync_all(void)
 {
 	struct knvram_partition *p;
 	int err;

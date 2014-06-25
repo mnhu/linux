@@ -98,7 +98,7 @@ extern int knvram_tbegin(knvram_handle_t);
 extern int knvram_tcommit(knvram_handle_t);
 extern int knvram_tabort(knvram_handle_t);
 extern int knvram_sync(struct knvram_partition *);
-extern void knvram_flush(void);
+extern void knvram_sync_all(void);
 
 /* dev.c prototypes */
 extern int knvram_dev_of_get_config(
