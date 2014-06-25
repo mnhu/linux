@@ -21,6 +21,7 @@
  */
 
 #ifndef _KNVRAM_H_
+#define _KNVRAM_H_
 
 #include <linux/ioctl.h>
 
@@ -101,12 +102,20 @@ extern int knvram_sync(struct knvram_partition *);
 extern void knvram_sync_all(void);
 
 /* dev.c prototypes */
+#ifdef CONFIG_KNVRAM_DEV
 extern int knvram_dev_of_get_config(
 	struct knvram_partition *, struct device_node *);
 int knvram_dev_alloc(struct knvram_partition *);
+void knvram_dev_free(struct knvram_partition *);
 int knvram_dev_register(struct knvram_partition *);
 void knvram_dev_unregister(struct knvram_partition *);
 void knvram_dev_readonly(struct knvram_partition *, int);
+#else /* CONFIG_KNVRAM_DEV */
+#define knvram_dev_of_get_config(p, np) (0)
+#define knvram_dev_alloc(p) (0)
+#define knvram_dev_free(p) do {} while (0)
+#define knvram_dev_readonly(p, b) do {} while (0)
+#endif /* CONFIG_KNVRAM_DEV */
 
 /* Flags for partitiontable entries flags field */
 #define KNVRAM_PT_READONLY 1<<0

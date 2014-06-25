@@ -279,14 +279,12 @@ nvram_reread_partitiontable(struct knvram_nvram_partitiontable *pt)
 			knvram_partition_init_transaction(
 				&np->p, (1 << pt->entries[i].pagesize));
 
-#ifdef CONFIG_KNVRAM_DEV
 		err = knvram_dev_alloc(&np->p);
 		if (err)
 			return err;
 
 		knvram_dev_readonly(
 			&np->p, (pt->entries[i].flags & KNVRAM_PT_READONLY));
-#endif /* CONFIG_KNVRAM_DEV */
 
 		pr_info("0x%08x-0x%08x : \"%s\"\n",
 			np->offset, np->offset + np->p.size, np->p.name);

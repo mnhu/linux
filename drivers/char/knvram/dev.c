@@ -259,6 +259,13 @@ knvram_dev_alloc(struct knvram_partition *p)
 }
 
 void
+knvram_dev_free(struct knvram_partition *p)
+{
+	kfree(p->dev);
+	p->dev = NULL;
+}
+
+void
 knvram_dev_readonly(struct knvram_partition *p, int readonly)
 {
 	struct knvram_device *dev = p->dev;
