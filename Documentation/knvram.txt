@@ -88,7 +88,7 @@ image to backend storage.
 The knvram_setautot() function can be used to enable/disable automatic
 transactions. With automatic transactions enabled, any write to a
 handle without an active transaction causes a new transaction to be
-started. No automatic commit will be done, so knvram_commit() might
+started. No automatic commit will be done, so knvram_tcommit() might
 come in handy :-)
 
 
