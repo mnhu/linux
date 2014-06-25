@@ -768,10 +768,3 @@ knvram_flush(void)
 MODULE_VERSION(DRV_VERSION);
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Kernel non-volatile RAM driver");
-
-
-/*
- * Local Variables:
- * compile-command: "make -C ../../.. M=drivers/char/knvram core.o"
- * End:
- */
