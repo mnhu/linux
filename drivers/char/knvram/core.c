@@ -299,6 +299,7 @@ knvram_close(struct knvram_handle *h)
 
 out:
 	mutex_unlock(&p->open_lock);
+	kfree(h);
 	return err;
 }
 
