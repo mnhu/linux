@@ -252,20 +252,20 @@ static void bcrej_disable(struct work_struct *work)
 	pr_info("%s: broadcast storm filter disabled", priv->ndev->name);
 }
 
-static int bcrej_init(struct net_device *ndev)
+int bcrej_init(struct net_device *ndev)
 {
 	struct gfar_private *priv = netdev_priv(ndev);
 
-	if (!priv->bcrej_cnt || !priv->bcrej_win)
+	if (!priv->bcrej_cnt)
 		/* disabled */
 		return 0;
+	priv->bcrej_ndx = 0;
+	INIT_DELAYED_WORK(&priv->bcrej_work, bcrej_disable);
+
 	priv->bcrej_time = kzalloc(sizeof(*priv->bcrej_time)
 				   * priv->bcrej_cnt, GFP_KERNEL);
 	if (!priv->bcrej_time)
 		return -ENOMEM;
-	priv->bcrej_ndx = 0;
-	if (priv->bcrej_delay)
-		INIT_DELAYED_WORK(&priv->bcrej_work, bcrej_disable);
 
 	return 0;
 }

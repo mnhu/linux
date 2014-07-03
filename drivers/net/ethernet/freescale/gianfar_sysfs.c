@@ -318,6 +318,86 @@ static ssize_t gfar_set_fifo_starve_off(struct device *dev,
 
 static DEVICE_ATTR(fifo_starve_off, 0644, gfar_show_fifo_starve_off,
 		   gfar_set_fifo_starve_off);
+static ssize_t gfar_show_bcrej_count(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
+
+	return sprintf(buf, "%d\n", priv->bcrej_cnt);
+}
+
+static ssize_t gfar_set_bcrej_count(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
+
+	/* Changing bcrej_cnt after bcrej_time is allocated currently not
+	 * supported.  To do this, we would have to provide proper locking and
+	 * reinitialize bcrej_time. */
+	if (priv->bcrej_time) {
+		dev_err(dev, "Cannot change bcrej-count after filter has been enabled\n");
+		return -EBUSY;
+	}
+
+	priv->bcrej_cnt = simple_strtoul(buf, NULL, 0);
+
+	if (!priv->bcrej_time)
+		bcrej_init(to_net_dev(dev));
+
+	return count;
+}
+
+static DEVICE_ATTR(bcrej_count, 0644, gfar_show_bcrej_count,
+		   gfar_set_bcrej_count);
+
+static ssize_t gfar_show_bcrej_window(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
+
+	return sprintf(buf, "%d\n", priv->bcrej_win / 1000);
+}
+
+static ssize_t gfar_set_bcrej_window(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
+
+	priv->bcrej_win = simple_strtoul(buf, NULL, 0) * 1000;
+
+	return count;
+}
+
+static DEVICE_ATTR(bcrej_window, 0644, gfar_show_bcrej_window,
+		   gfar_set_bcrej_window);
+
+static ssize_t gfar_show_bcrej_delay(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
+
+	return sprintf(buf, "%lu\n", (priv->bcrej_delay * 1000) / HZ);
+}
+
+static ssize_t gfar_set_bcrej_delay(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
+	unsigned int num = simple_strtoul(buf, NULL, 0);
+
+	priv->bcrej_delay = num ? DIV_ROUND_UP(num * HZ, 1000) : HZ;
+
+	return count;
+}
+
+static DEVICE_ATTR(bcrej_delay, 0644, gfar_show_bcrej_delay,
+		   gfar_set_bcrej_delay);
 
 void gfar_init_sysfs(struct net_device *dev)
 {
@@ -336,6 +416,12 @@ void gfar_init_sysfs(struct net_device *dev)
 	rc |= device_create_file(&dev->dev, &dev_attr_fifo_threshold);
 	rc |= device_create_file(&dev->dev, &dev_attr_fifo_starve);
 	rc |= device_create_file(&dev->dev, &dev_attr_fifo_starve_off);
+
+	/* Create sysfs files for broadcast storm rejection filter */
+	rc |= device_create_file(&dev->dev, &dev_attr_bcrej_count);
+	rc |= device_create_file(&dev->dev, &dev_attr_bcrej_window);
+	rc |= device_create_file(&dev->dev, &dev_attr_bcrej_delay);
+
 	if (rc)
 		dev_err(&dev->dev, "Error creating gianfar sysfs files\n");
 }
