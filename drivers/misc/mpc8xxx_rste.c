@@ -29,6 +29,7 @@
 #include <linux/reboot.h>
 #include <linux/bitops.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 #define DRV_NAME	"mpc8xxx_rste"
 #define DEBUG_LEVEL	0
@@ -118,6 +119,8 @@ static struct mpc8xxx_rste * mpc8xxx_rste = NULL;
 
 static struct miscdevice miscdev;
 static struct proc_dir_entry * procfile;
+
+static const struct file_operations mpc8xxx_rste_proc_ops;
 
 static knvram_handle_t
 get_knvram_handle(void)
@@ -334,32 +337,26 @@ static struct attribute_group sysfs_group = {
 
 
 static int
-mpc8xxx_rste_proc_read(char *page, char **start, off_t off,
-		       int count, int *eof, void *data)
+mpc8xxx_rste_proc_show(struct seq_file *sfile, void *not_used)
 {
-        char *p = page;
 	int i, written;
 
 	BUG_ON(mpc8xxx_rste == NULL);
 
-	written = scnprintf_mpc8xxx_rste_current(p, count);
+	written = scnprintf_mpc8xxx_rste_current(sfile->buf, PAGE_SIZE);
 	if (written < 0)
 		goto out;
-	count -= written;
-	p += written;
-	for (i=0 ; i < __NUM_RESET_COUNTERS__ && count > 0 ; i++) {
-		written = scnprintf(p, count, "%-18s = %hu / %u\n",
+	for (i=0 ; i < __NUM_RESET_COUNTERS__ ; i++) {
+		written = seq_printf(sfile, "%-18s = %hu / %u\n",
 				    reset_counter_name[i],
 				    mpc8xxx_rste->counter[i].current,
 				    mpc8xxx_rste->counter[i].total);
 		if (written < 0)
 			goto out;
-		count -= written;
-		p += written;
 	}
 
 out:
-        return (p - page);
+        return 0;
 }
 
 
@@ -430,8 +427,8 @@ mpc8xxx_rste_init(void)
 		goto fail_misc_register;
 	}
 
-	procfile = create_proc_read_entry(DRV_NAME, S_IRUGO, NULL,
-					  mpc8xxx_rste_proc_read, NULL);
+	procfile = proc_create_data(DRV_NAME, S_IRUGO, NULL,
+					  &mpc8xxx_rste_proc_ops, NULL);
 	if (IS_ERR(procfile)) {
 		err = PTR_ERR(procfile);
 		pr_err("%s: cailed to create proc entry: %d", __func__, err);
@@ -465,6 +462,18 @@ fail_kmalloc:
 	return err;
 }
 device_initcall(mpc8xxx_rste_init);
+
+static int mpc8xxx_rste_proc_read(struct inode *inode, struct file *file)
+{
+	return single_open(file, mpc8xxx_rste_proc_show, PDE_DATA(inode));
+}
+static const struct file_operations mpc8xxx_rste_proc_ops = {
+	.owner		= THIS_MODULE,
+	.open		= mpc8xxx_rste_proc_read,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
 
 
 /*
