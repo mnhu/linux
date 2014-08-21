@@ -1,3 +1,4 @@
+
 /*
  * The Linux knvram driver
  *
@@ -20,19 +21,10 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _KNVRAM_H_
-#define _KNVRAM_H_
+#ifndef _LINUX_KNVRAM_H_
+#define _LINUX_KNVRAM_H_
 
-#include <linux/ioctl.h>
-
-#define KNVRAM_IOCTL_BASE	'K'
-
-#define KNVRAMIOC_SYNC		_IO(KNVRAM_IOCTL_BASE, 0)
-#define KNVRAMIOC_TBEGIN	_IO(KNVRAM_IOCTL_BASE, 1)
-#define KNVRAMIOC_TCOMMIT	_IO(KNVRAM_IOCTL_BASE, 2)
-#define KNVRAMIOC_TABORT	_IO(KNVRAM_IOCTL_BASE, 3)
-#define KNVRAMIOC_SETAUTOT	_IOW(KNVRAM_IOCTL_BASE, 4, int)
-#define KNVRAMIOC_GETAUTOT	_IOR(KNVRAM_IOCTL_BASE, 5, int)
+#include <uapi/linux/knvram.h>
 
 #ifdef __KERNEL__
 
@@ -129,4 +121,4 @@ typedef void * knvram_handle_t;
 
 #endif /* __KERNEL__ */
 
-#endif /* _KNVRAM_H_ */
+#endif /* _LINUX_KNVRAM_H */
