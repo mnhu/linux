@@ -602,9 +602,7 @@ bool queue_delayed_kthread_work(struct kthread_worker *worker,
 	struct kthread_work *work = &dwork->work;
 
 	spin_lock_irqsave(&worker->lock, flags);
-	if (list_empty(&work->node)) {
-		BUG_ON(timer_pending(timer));
-
+	if (list_empty(&work->node) && !timer_pending(timer)) {
 		dwork->worker = worker;
 		timer_stats_timer_set_start_info(&dwork->timer);
 
