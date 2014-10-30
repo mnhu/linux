@@ -232,9 +232,13 @@ static void bcrej_enable(struct gfar_private *priv)
 
 	/* Enable broadcast frame reject */
 	tempval = gfar_read(&regs->rctrl);
+	if (tempval & RCTRL_BC_REJ)
+		return;
 	tempval |= RCTRL_BC_REJ;
 	gfar_write(&regs->rctrl, tempval);
 	pr_warning("%s: broadcast storm filter enabled", priv->ndev->name);
+	/* Schedule re-enable work */
+	schedule_delayed_work(&priv->bcrej_work, priv->bcrej_delay);
 }
 
 static void bcrej_disable(struct work_struct *work)
@@ -2833,12 +2837,8 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 				priv->bcrej_ndx = 0;
 			delta = ktime_us_delta(
 				now, priv->bcrej_time[priv->bcrej_ndx]);
-			if (delta < priv->bcrej_win) {
+			if (delta < priv->bcrej_win)
 				bcrej_enable(priv);
-				/* Schedule re-enable work */
-				schedule_delayed_work(&priv->bcrej_work,
-						      priv->bcrej_delay);
-			}
 		}
 
 		/* Add another skb for the future */
