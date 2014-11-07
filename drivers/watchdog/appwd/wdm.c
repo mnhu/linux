@@ -269,7 +269,7 @@ boot_done(struct kthread_work * work)
 	switch (wdm->state) {
 
 	case WDM_STATE_BOOT:
-		pr_notice("Appliance Watchdog boot completed\n");
+		pr_info("Appliance Watchdog boot completed\n");
 		wdm->state = WDM_STATE_ACTIVE;
 		wdd_init_start();
 		break;
