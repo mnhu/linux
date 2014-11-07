@@ -20,6 +20,7 @@
 #ifdef __KERNEL__
 
 #ifdef CONFIG_APPWD
+extern int get_appwd_state(void);
 extern void appwd_init_post_hook(void);
 #else
 #define appwd_init_post_hook() do {} while (0)
