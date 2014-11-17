@@ -27,6 +27,7 @@ zImage.*lds
 zImage.miboot
 zImage.pmac
 zImage.pseries
+*.dtb
 zconf.h
 zlib.h
 zutil.h
