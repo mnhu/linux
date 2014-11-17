@@ -190,7 +190,8 @@ endif
 # args (to if_changed): 1 = (this rule), 2 = platform, 3 = dts 4=dtb 5=initrd
 quiet_cmd_wrap	= WRAP    $@
       cmd_wrap	=$(CONFIG_SHELL) $(wrapper) -c -o $@ -p $2 $(CROSSWRAP) \
-		$(if $3, -s $3)$(if $4, -d $4)$(if $5, -i $5) vmlinux
+		$(if $3, -s $3)$(if $4, -d $4)$(if $5, -i $5)$(if $6, --comp $6) \
+		vmlinux
 
 image-$(CONFIG_PPC_PSERIES)		+= zImage.pseries
 image-$(CONFIG_PPC_POWERNV)		+= zImage.pseries
@@ -337,6 +338,18 @@ $(obj)/uImage.initrd.%: vmlinux $(obj)/%.dtb $(wrapperbits)
 
 $(obj)/uImage.%: vmlinux $(obj)/%.dtb $(wrapperbits)
 	$(call if_changed,wrap,uboot-$*,,$(obj)/$*.dtb)
+
+$(obj)/uImage.none: vmlinux $(wrapperbits)
+	$(call if_changed,wrap,uboot,,,,--no-comp)
+
+$(obj)/uImage.lzma: vmlinux $(wrapperbits)
+	$(call if_changed,wrap,uboot,,,,lzma)
+
+$(obj)/uImage.lzo: vmlinux $(wrapperbits)
+	$(call if_changed,wrap,uboot,,,,lzo)
+
+$(obj)/uImage.bzip2: vmlinux $(wrapperbits)
+	$(call if_changed,wrap,uboot,,,,bzip2)
 
 $(obj)/cuImage.initrd.%: vmlinux $(obj)/%.dtb $(wrapperbits)
 	$(call if_changed,wrap,cuboot-$*,,$(obj)/$*.dtb,$(obj)/ramdisk.image.gz)

@@ -20,6 +20,8 @@
 # -D dir	specify directory containing data files used by script
 #		(default ./arch/powerpc/boot)
 # -W dir	specify working directory for temporary files (default .)
+# --comp algo	specify compression algorithm (default gzip)
+# --no-comp	do not compress image
 
 # Stop execution if any command fails
 set -e
@@ -38,8 +40,8 @@ dtb=
 dts=
 cacheit=
 binary=
-gzip=.gz
 pie=
+comp=gzip
 
 # cross-compilation prefix
 CROSS=
@@ -58,7 +60,8 @@ tmpdir=.
 usage() {
     echo 'Usage: wrapper [-o output] [-p platform] [-i initrd]' >&2
     echo '       [-d devtree] [-s tree.dts] [-c] [-C cross-prefix]' >&2
-    echo '       [-D datadir] [-W workingdir] [--no-gzip] [vmlinux]' >&2
+    echo '       [-D datadir] [-W workingdir] [--comp algorithm | --no-comp]' >&2
+    echo '       [vmlinux]' >&2
     exit 1
 }
 
@@ -109,7 +112,15 @@ while [ "$#" -gt 0 ]; do
 	tmpdir="$1"
 	;;
     --no-gzip)
-        gzip=
+        comp=
+	;;
+    --comp)
+	shift
+	[ "$#" -gt 0 ] || usage
+        comp="$1"
+        ;;
+    --no-comp)
+        comp=
         ;;
     -?)
 	usage
@@ -174,7 +185,7 @@ miboot|uboot*)
     ;;
 cuboot*)
     binary=y
-    gzip=
+    comp=
     case "$platform" in
     *-mpc866ads|*-mpc885ads|*-adder875*|*-ep88xc)
         platformo=$object/cuboot-8xx.o
@@ -205,7 +216,7 @@ cuboot*)
 ps3)
     platformo="$object/ps3-head.o $object/ps3-hvcall.o $object/ps3.o"
     lds=$object/zImage.ps3.lds
-    gzip=
+    comp=
     ext=bin
     objflags="-O binary --set-section-flags=.bss=contents,alloc,load,data"
     ksection=.kernel:vmlinux.bin
@@ -258,18 +269,49 @@ epapr)
     ;;
 esac
 
-vmz="$tmpdir/`basename \"$kernel\"`.$ext"
-if [ -z "$cacheit" -o ! -f "$vmz$gzip" -o "$vmz$gzip" -ot "$kernel" ]; then
-    ${CROSS}objcopy $objflags "$kernel" "$vmz.$$"
+case "$comp" in
+gzip)
+    comp_ext=".gz"
+    ;;
+lzma)
+    comp_ext=".lzma"
+    ;;
+lzo)
+    comp_ext=".lzo"
+    ;;
+bzip2)
+    comp_ext=".bz2"
+    ;;
+*)
+    comp_ext=""
+    ;;
+esac
 
+vmz="$tmpdir/`basename \"$kernel\"`.$ext"
+if [ -z "$cacheit" -o ! -f "$vmz$comp_ext" -o "$vmz$comp_ext" -ot "$kernel" ]; then
+    ${CROSS}objcopy $objflags "$kernel" "$vmz.$$"
     strip_size=$(stat -c %s $vmz.$$)
 
-    if [ -n "$gzip" ]; then
+    case "$comp" in
+    gzip)
         gzip -n -f -9 "$vmz.$$"
-    fi
+	;;
+    lzma)
+	lzma -f -9 "$vmz.$$"
+	;;
+    lzo)
+	lzop -f -9 "$vmz.$$"
+	;;
+    bzip2)
+	bzip2 -f -9 "$vmz.$$"
+	;;
+    *)
+	comp=
+	;;
+    esac
 
     if [ -n "$cacheit" ]; then
-	mv -f "$vmz.$$$gzip" "$vmz$gzip"
+	mv -f "$vmz.$$$comp_ext" "$vmz$comp_ext"
     else
 	vmz="$vmz.$$"
     fi
@@ -295,7 +337,7 @@ if [ "$make_space" = "y" ]; then
 	fi
 fi
 
-vmz="$vmz$gzip"
+vmz="$vmz$comp_ext"
 
 # Extract kernel version information, some platforms want to include
 # it in the image header
@@ -311,7 +353,29 @@ membase=`${CROSS}objdump -p "$kernel" | grep -m 1 LOAD | awk '{print $7}'`
 case "$platform" in
 uboot)
     rm -f "$ofile"
-    ${MKIMAGE} -A ppc -O linux -T kernel -C gzip -a $membase -e $membase \
+
+    case "$comp" in
+    gzip)
+	comp_arg="-C gzip"
+	;;
+    lzma)
+	comp_arg="-C lzma"
+	;;
+    lzo)
+	comp_arg="-C lzo"
+	;;
+    bzip2)
+	comp_arg="-C bzip2"
+	;;
+    "")
+	comp_arg="-C none"
+	;;
+    *)
+	comp_arg=""
+	;;
+    esac
+
+    ${MKIMAGE} -A ppc -O linux -T kernel $comp_arg -a $membase -e $membase \
 	$uboot_version -d "$vmz" "$ofile"
     if [ -z "$cacheit" ]; then
 	rm -f "$vmz"
@@ -333,6 +397,37 @@ uboot-obs600)
     if [ -z "$initrd" ]; then
 	rm -f "$real_rd"
     fi
+    if [ -z "$cacheit" ]; then
+	rm -f "$vmz"
+    fi
+    exit 0
+    ;;
+uboot*)
+    rm -f "$ofile"
+
+    case "$comp" in
+    gzip)
+	comp_arg="-C gzip"
+	;;
+    lzma)
+	comp_arg="-C lzma"
+	;;
+    lzo)
+	comp_arg="-C lzo"
+	;;
+    bzip2)
+	comp_arg="-C bzip2"
+	;;
+    "")
+	comp_arg="-C none"
+	;;
+    *)
+	comp_arg=""
+	;;
+    esac
+
+    ${MKIMAGE} -A ppc -O linux -T multi $comp_arg -a $membase -e $membase \
+	$uboot_version -d "$vmz":"$dtb" "$ofile"
     if [ -z "$cacheit" ]; then
 	rm -f "$vmz"
     fi
