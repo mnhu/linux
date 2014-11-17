@@ -458,6 +458,12 @@ config MTD_NAND_FSL_ELBC
 	  Enabling this option will enable you to use this to control
 	  external NAND devices.
 
+config MTD_NAND_FSL_ON_DIE_ECC
+	tristate "ON DIE NAND support for Freescale eLBC controllers"
+	depends on MTD_NAND_FSL_ELBC
+	help
+          Enable support for on die nand ecc instead of built-in hw.
+
 config MTD_NAND_FSL_IFC
 	tristate "NAND support for Freescale IFC controller"
 	depends on MTD_NAND && FSL_SOC

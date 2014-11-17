@@ -108,6 +108,24 @@ static struct nand_ecclayout fsl_elbc_oob_lp_eccm1 = {
 	.oobfree = { {1, 7}, {11, 13}, {27, 13}, {43, 13}, {59, 5} },
 };
 
+#ifdef CONFIG_MTD_NAND_FSL_ON_DIE_ECC
+static struct nand_ecclayout fsl_elbc_oob_micron_modified = {
+	.eccbytes = 32,
+	.eccpos = {
+		8,  9, 10, 11, 12, 13, 14, 15,
+		24, 25, 26, 27, 28, 29, 30, 31,
+		40, 41, 42, 43, 44, 45, 46, 47,
+		56, 57, 58, 59, 60, 61, 62, 63
+	},
+	.oobfree = {
+		{ .offset = 4, .length = 4 },
+		{ .offset = 20, .length = 4 },
+		{ .offset = 36, .length = 4 },
+		{ .offset = 52, .length = 4 },
+	},
+};
+#endif
+
 /*
  * ELBC may use HW ECC, so that OOB offsets, that NAND core uses for bbt,
  * interfere with ECC positions, that's why we implement our own descriptors.
@@ -116,6 +134,7 @@ static struct nand_ecclayout fsl_elbc_oob_lp_eccm1 = {
 static u8 bbt_pattern[] = {'B', 'b', 't', '0' };
 static u8 mirror_pattern[] = {'1', 't', 'b', 'B' };
 
+#ifdef CONFIG_MTD_NAND_FSL_ON_DIE_ECC
 static struct nand_bbt_descr bbt_main_descr = {
 	.options = NAND_BBT_LASTBLOCK | NAND_BBT_CREATE | NAND_BBT_WRITE |
 		   NAND_BBT_2BIT | NAND_BBT_VERSION,
@@ -135,7 +154,26 @@ static struct nand_bbt_descr bbt_mirror_descr = {
 	.maxblocks = 4,
 	.pattern = mirror_pattern,
 };
-
+#else
+static struct nand_bbt_descr bbt_main_descr = {
+	.options = NAND_BBT_LASTBLOCK | NAND_BBT_CREATE | NAND_BBT_WRITE |
+		   NAND_BBT_2BIT | NAND_BBT_VERSION,
+	.offs =	4,
+	.len = 4,
+	.veroffs = 18,
+	.maxblocks = 4,
+	.pattern = bbt_pattern,
+ };
+static struct nand_bbt_descr bbt_mirror_descr = {
+	.options = NAND_BBT_LASTBLOCK | NAND_BBT_CREATE | NAND_BBT_WRITE |
+		   NAND_BBT_2BIT | NAND_BBT_VERSION,
+	.offs =	4,
+	.len = 4,
+	.veroffs = 18,
+	.maxblocks = 4,
+	.pattern = mirror_pattern,
+};
+#endif
 /*=================================*/
 
 /*
@@ -266,6 +304,61 @@ static int fsl_elbc_run_command(struct mtd_info *mtd)
 	return 0;
 }
 
+ static void fsl_elbc_do_read_mtd(struct nand_chip *chip, int oob, struct mtd_info *mtd)
+{
+	struct fsl_elbc_mtd *priv = chip->priv;
+	struct fsl_lbc_ctrl *ctrl = priv->ctrl;
+	struct fsl_elbc_fcm_ctrl *elbc_fcm_ctrl = ctrl->nand;
+	struct fsl_lbc_regs __iomem *lbc = ctrl->regs;
+
+	if (priv->page_size) {
+		if (chip->ecc.mode == NAND_ECC_ON_DIE) {
+		  out_be32(&lbc->fir,
+			   (FIR_OP_CM0 << FIR_OP0_SHIFT) |
+			   (FIR_OP_CA  << FIR_OP1_SHIFT) |
+			   (FIR_OP_PA  << FIR_OP2_SHIFT) |
+			   (FIR_OP_CM1 << FIR_OP3_SHIFT));
+
+		  out_be32(&lbc->fcr, (NAND_CMD_READ0 << FCR_CMD0_SHIFT) |
+			   (NAND_CMD_READSTART << FCR_CMD1_SHIFT));
+		  fsl_elbc_run_command(mtd);
+		  /* Read status*/
+		  out_be32(&lbc->fir,
+			   (FIR_OP_CW0 << FIR_OP0_SHIFT) |
+			   (FIR_OP_RS << FIR_OP1_SHIFT) |
+			   (FIR_OP_CM1 << FIR_OP2_SHIFT) |
+			   (FIR_OP_RBW << FIR_OP3_SHIFT));
+		  out_be32(&lbc->fcr, NAND_CMD_STATUS << FCR_CMD0_SHIFT |
+			   NAND_CMD_READ0 << FCR_CMD1_SHIFT);
+		  elbc_fcm_ctrl->mdr=0;
+		  elbc_fcm_ctrl->use_mdr=1;
+		}
+		else {
+		  out_be32(&lbc->fir,
+		         (FIR_OP_CM0 << FIR_OP0_SHIFT) |
+		         (FIR_OP_CA  << FIR_OP1_SHIFT) |
+		         (FIR_OP_PA  << FIR_OP2_SHIFT) |
+		         (FIR_OP_CM1 << FIR_OP3_SHIFT) |
+		         (FIR_OP_RBW << FIR_OP4_SHIFT));
+
+		  out_be32(&lbc->fcr, (NAND_CMD_READ0 << FCR_CMD0_SHIFT) |
+		                    (NAND_CMD_READSTART << FCR_CMD1_SHIFT));
+		}
+	} else {
+		out_be32(&lbc->fir,
+		         (FIR_OP_CW0 << FIR_OP0_SHIFT) |
+		         (FIR_OP_CA  << FIR_OP1_SHIFT) |
+		         (FIR_OP_PA  << FIR_OP2_SHIFT) |
+		         (FIR_OP_RBW << FIR_OP3_SHIFT));
+
+		if (oob)
+			out_be32(&lbc->fcr, NAND_CMD_READOOB << FCR_CMD0_SHIFT);
+		else
+			out_be32(&lbc->fcr, NAND_CMD_READ0 << FCR_CMD0_SHIFT);
+	}
+}
+
+
 static void fsl_elbc_do_read(struct nand_chip *chip, int oob)
 {
 	struct fsl_elbc_mtd *priv = chip->priv;
@@ -331,8 +424,21 @@ static void fsl_elbc_cmdfunc(struct mtd_info *mtd, unsigned int command,
 		elbc_fcm_ctrl->read_bytes = mtd->writesize + mtd->oobsize;
 		elbc_fcm_ctrl->index += column;
 
+#ifdef CONFIG_MTD_NAND_FSL_ON_DIE_ECC
+		fsl_elbc_do_read_mtd(chip, 0, mtd);
+		fsl_elbc_run_command(mtd);
+		if(elbc_fcm_ctrl->mdr & NAND_STATUS_FAIL){/* MICRON: check error bit */
+			printk(KERN_INFO "*** FATAL READ ERROR***\n");
+			mtd->ecc_stats.failed++;
+		}
+		else if (elbc_fcm_ctrl->mdr & NAND_STATUS_REWRITE_RECOMMENDED ) {
+			printk(KERN_INFO "WARNING: rewrite recommended!\n");
+                        mtd->ecc_stats.corrected++;
+		}
+#else
 		fsl_elbc_do_read(chip, 0);
 		fsl_elbc_run_command(mtd);
+#endif
 		return;
 
 	/* READOOB reads only the OOB because no ECC is performed. */
@@ -682,6 +788,9 @@ static int fsl_elbc_chip_init_tail(struct mtd_info *mtd)
 		if ((in_be32(&lbc->bank[priv->bank].br) & BR_DECC) ==
 		    BR_DECC_CHK_GEN) {
 			chip->ecc.size = 512;
+#ifdef CONFIG_MTD_NAND_FSL_ON_DIE_ECC
+			if (!chip->ecc.layout)
+#endif
 			chip->ecc.layout = (priv->fmr & FMR_ECCM) ?
 			                   &fsl_elbc_oob_lp_eccm1 :
 			                   &fsl_elbc_oob_lp_eccm0;
@@ -707,8 +816,18 @@ static int fsl_elbc_read_page(struct mtd_info *mtd, struct nand_chip *chip,
 	if (oob_required)
 		fsl_elbc_read_buf(mtd, chip->oob_poi, mtd->oobsize);
 
+#ifdef CONFIG_MTD_NAND_FSL_ON_DIE_ECC
+	unsigned char res;
+	res=fsl_elbc_wait(mtd, chip);
+	if (res & NAND_STATUS_FAIL) {
+		mtd->ecc_stats.failed++;
+	} else if (res & NAND_STATUS_REWRITE_RECOMMENDED) {
+		mtd->ecc_stats.failed++;
+	}
+#else
 	if (fsl_elbc_wait(mtd, chip) & NAND_STATUS_FAIL)
 		mtd->ecc_stats.failed++;
+#endif
 
 	return elbc_fcm_ctrl->max_bitflips;
 }
@@ -774,6 +893,11 @@ static int fsl_elbc_chip_init(struct fsl_elbc_mtd *priv)
 		chip->ecc.size = 512;
 		chip->ecc.bytes = 3;
 		chip->ecc.strength = 1;
+#ifdef CONFIG_MTD_NAND_FSL_ON_DIE_ECC
+        } else if ((in_be32(&lbc->bank[priv->bank].br) & BR_DECC) == BR_DECC_OFF) {
+		chip->ecc.mode = NAND_ECC_ON_DIE;
+		chip->ecc.layout = &fsl_elbc_oob_micron_modified;
+#endif
 	} else {
 		/* otherwise fall back to default software ECC */
 		chip->ecc.mode = NAND_ECC_SOFT;
