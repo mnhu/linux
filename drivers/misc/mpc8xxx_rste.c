@@ -205,20 +205,20 @@ mpc8xxx_rste_cause(unsigned cause)
 void
 mpc8xxx_rste_panic(char *str)
 {
-        mpc8xxx_rste_cause(RESET_CAUSE_LINUX_PANIC);
+	mpc8xxx_rste_cause(RESET_CAUSE_LINUX_PANIC);
 }
 
 static int
 mpc8xxx_rste_reboot(struct notifier_block *this,
 		    unsigned long code, void *unused)
 {
-        if (code == SYS_RESTART)
-                mpc8xxx_rste_cause(RESET_CAUSE_LINUX_RESET);
-        return NOTIFY_DONE;
+	if (code == SYS_RESTART)
+		mpc8xxx_rste_cause(RESET_CAUSE_LINUX_RESET);
+	return NOTIFY_DONE;
 }
 
 static struct notifier_block mpc8xxx_rste_reboot_notifier = {
-        .notifier_call  = mpc8xxx_rste_reboot,
+	.notifier_call  = mpc8xxx_rste_reboot,
 };
 
 static ssize_t
@@ -356,7 +356,7 @@ mpc8xxx_rste_proc_show(struct seq_file *sfile, void *not_used)
 	}
 
 out:
-        return 0;
+	return 0;
 }
 
 
@@ -411,12 +411,12 @@ mpc8xxx_rste_init(void)
 	else
 		pr_warning(DRV_NAME ": failed to log current reset event(s)");
 
-        err = register_reboot_notifier(&mpc8xxx_rste_reboot_notifier);
-        if (err) {
-                pr_err("%s: reboot notifier registration failed: %d\n",
+	err = register_reboot_notifier(&mpc8xxx_rste_reboot_notifier);
+	if (err) {
+		pr_err("%s: reboot notifier registration failed: %d\n",
 		       __func__, err);
-                goto fail_register_reboot_notifier;
-        }
+		goto fail_register_reboot_notifier;
+	}
 
 	miscdev.name = DRV_NAME;
 	miscdev.fops = NULL;
@@ -474,10 +474,3 @@ static const struct file_operations mpc8xxx_rste_proc_ops = {
 	.llseek		= seq_lseek,
 	.release	= single_release,
 };
-
-
-/*
- * Local Variables:
- * compile-command: "make -C ../.. M=drivers/misc mpc8xxx_rste.o"
- * End:
- */
