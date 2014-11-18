@@ -20,6 +20,11 @@
 #include <linux/bcd.h>
 #include <linux/rtc/ds1307.h>
 
+#ifdef CONFIG_RTC_DRV_DS1307_TEMP
+#include <linux/miscdevice.h>
+#include <uapi/linux/rtc-ds1307.h>
+#endif
+
 /*
  * We can't determine type by probing, but if we expect pre-Linux code
  * to have set the chip up as a clock (turning on the oscillator and
@@ -101,6 +106,8 @@ enum ds_type {
 #	define RX8025_BIT_PON		0x10
 #	define RX8025_BIT_VDET		0x40
 #	define RX8025_BIT_XST		0x20
+#define DS3231_REG_TEMP_MSB	0x11
+#define DS3231_REG_TEMP_LSB	0x12
 
 
 struct ds1307 {
@@ -112,6 +119,8 @@ struct ds1307 {
 	unsigned long		flags;
 #define HAS_NVRAM	0		/* bit 0 == sysfs file active */
 #define HAS_ALARM	1		/* bit 1 == irq claimed */
+#define HAS_TEMP_ATTR	2		/* bit 2 == tempature sysfs active */
+#define HAS_TEMP_DEV	4		/* bit 3 == tempature miscdev active */
 	struct i2c_client	*client;
 	struct rtc_device	*rtc;
 	struct work_struct	work;
@@ -119,6 +128,10 @@ struct ds1307 {
 			       u8 length, u8 *values);
 	s32 (*write_block_data)(const struct i2c_client *client, u8 command,
 				u8 length, const u8 *values);
+#ifdef CONFIG_RTC_DRV_DS1307_TEMP
+	struct miscdevice	temp_dev;
+	struct list_head	temp_dev_lh;
+#endif /* CONFIG_RTC_DRV_DS1307_TEMP */
 };
 
 struct chip_desc {
@@ -126,6 +139,7 @@ struct chip_desc {
 	u16			nvram_offset;
 	u16			nvram_size;
 	u16			trickle_charger_reg;
+	unsigned		temp:1;
 };
 
 static const struct chip_desc chips[last_ds_type] = {
@@ -152,6 +166,7 @@ static const struct chip_desc chips[last_ds_type] = {
 	},
 	[ds_3231] = {
 		.alarm		= 1,
+		.temp		= 1,
 	},
 	[mcp7941x] = {
 		/* this is battery backed SRAM */
@@ -660,6 +675,94 @@ ds1307_nvram_write(struct file *filp, struct kobject *kobj,
 	return count;
 }
 
+static int
+read_temp(struct i2c_client *client, s8 *temp)
+{
+	int data;
+
+	data = i2c_smbus_read_byte_data(client, DS3231_REG_TEMP_MSB);
+	if (data < 0) {
+		dev_err(&client->dev, "%s error %d\n", __func__, data);
+		return data;
+	}
+
+	*temp = data;
+	return 0;
+}
+
+static ssize_t
+ds1307_temp_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int err;
+	s8 temp;
+
+	err = read_temp(to_i2c_client(dev), &temp);
+	if (err < 0)
+		return err;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", temp);
+}
+static DEVICE_ATTR(temp, S_IRUGO, ds1307_temp_show, NULL);
+
+DEFINE_MUTEX(ds1307_temp_lock);
+LIST_HEAD(ds1307_temp_devs);
+
+static int ds1307_temp_open(struct inode *inode, struct file *file)
+{
+	int err = 0;
+	struct ds1307 *entry, *ds1307=NULL;
+
+	mutex_lock(&ds1307_temp_lock);
+	list_for_each_entry(entry, &ds1307_temp_devs, temp_dev_lh) {
+		if (iminor(inode) == entry->temp_dev.minor) {
+			ds1307 = entry;
+			break;
+		}
+	}
+	if (ds1307 == NULL) {
+		err = -ENODEV;
+		goto out;
+	}
+
+	file->private_data = ds1307;
+
+out:
+	mutex_unlock(&ds1307_temp_lock);
+	return err;
+}
+
+static int ds1307_temp_release(struct inode *inode, struct file *file)
+{
+	mutex_lock(&ds1307_temp_lock);
+	mutex_unlock(&ds1307_temp_lock);
+	return 0;
+}
+
+static long ds1307_temp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	int err = -ENOTTY;
+	s8 temp;
+	struct ds1307 *ds1307 = file->private_data;
+
+	switch (cmd) {
+	case DS1307IOC_GETTEMP:
+		err = read_temp(ds1307->client, &temp);
+		if (err < 0)
+			break;
+		err = put_user(temp, (s8 __user *)arg);
+		break;
+	}
+
+	return err;
+}
+
+static const struct file_operations ds1307_temp_fops = {
+	.owner		= THIS_MODULE,
+	.open		= ds1307_temp_open,
+	.release	= ds1307_temp_release,
+	.unlocked_ioctl		= ds1307_temp_ioctl,
+};
+
 /*----------------------------------------------------------------------*/
 
 static int ds1307_probe(struct i2c_client *client,
@@ -972,6 +1075,25 @@ read_rtc:
 		dev_info(&client->dev, "%zu bytes nvram\n", ds1307->nvram->size);
 	}
 
+#ifdef CONFIG_RTC_DRV_DS1307_TEMP
+	if (chip->temp) {
+		err = device_create_file(&client->dev, &dev_attr_temp);
+		if (err == 0) {
+			set_bit(HAS_TEMP_ATTR, &ds1307->flags);
+			dev_info(&client->dev, "Registered temperature attr\n");
+		} else
+			dev_warn(&client->dev, "AIEE! failed to register sysfs attr\n");
+		ds1307->temp_dev.minor = MISC_DYNAMIC_MINOR;
+		ds1307->temp_dev.name = "ds1307_temp";
+		ds1307->temp_dev.fops = &ds1307_temp_fops;
+		err = misc_register(&ds1307->temp_dev);
+		if (err == 0) {
+			INIT_LIST_HEAD(&ds1307->temp_dev_lh);
+			list_add(&ds1307->temp_dev_lh, &ds1307_temp_devs);
+		}
+	}
+#endif /* CONFIG_RTC_DRV_DS1307_TEMP */
+
 	return 0;
 
 err_irq:
@@ -991,6 +1113,11 @@ static int ds1307_remove(struct i2c_client *client)
 
 	if (test_and_clear_bit(HAS_NVRAM, &ds1307->flags))
 		sysfs_remove_bin_file(&client->dev.kobj, ds1307->nvram);
+
+	if (test_and_clear_bit(HAS_TEMP_ATTR, &ds1307->flags))
+		device_remove_file(&client->dev, &dev_attr_temp);
+	if (test_and_clear_bit(HAS_TEMP_DEV, &ds1307->flags))
+		misc_deregister(&ds1307->temp_dev);
 
 	return 0;
 }

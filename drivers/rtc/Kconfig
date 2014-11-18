@@ -181,6 +181,14 @@ config RTC_DRV_DS1307
 	  This driver can also be built as a module. If so, the module
 	  will be called rtc-ds1307.
 
+config RTC_DRV_DS1307_TEMP
+	bool "Temperature sensor interface for DS1307 compatible RTC chips"
+	depends on RTC_DRV_DS1307
+	default y
+	help
+	  Enable temperature sensor interface for the Dallas/Maxim
+	  DS1307/37/38/39/40, ST M41T00, EPSON RX-8025 RTC chips.
+
 config RTC_DRV_DS1374
 	tristate "Dallas/Maxim DS1374"
 	depends on I2C
