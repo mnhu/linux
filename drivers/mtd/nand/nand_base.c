@@ -1888,7 +1888,7 @@ static int nand_write_page_raw(struct mtd_info *mtd, struct nand_chip *chip,
 	}
 	else if (res & NAND_STATUS_REWRITE_RECOMMENDED) {
 		pr_info("Rewrite Recommended\n");
-		mtd->ecc_stats.failed++;
+		mtd->ecc_stats.corrected++;
 	}
 #endif
 
