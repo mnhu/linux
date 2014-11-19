@@ -433,7 +433,7 @@ static void fsl_elbc_cmdfunc(struct mtd_info *mtd, unsigned int command,
 		}
 		else if (elbc_fcm_ctrl->mdr & NAND_STATUS_REWRITE_RECOMMENDED ) {
 			printk(KERN_INFO "WARNING: rewrite recommended!\n");
-                        mtd->ecc_stats.corrected++;
+			mtd->ecc_stats.corrected++;
 		}
 #else
 		fsl_elbc_do_read(chip, 0);
@@ -822,7 +822,7 @@ static int fsl_elbc_read_page(struct mtd_info *mtd, struct nand_chip *chip,
 	if (res & NAND_STATUS_FAIL) {
 		mtd->ecc_stats.failed++;
 	} else if (res & NAND_STATUS_REWRITE_RECOMMENDED) {
-		mtd->ecc_stats.failed++;
+		mtd->ecc_stats.corrected++;
 	}
 #else
 	if (fsl_elbc_wait(mtd, chip) & NAND_STATUS_FAIL)
