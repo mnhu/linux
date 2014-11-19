@@ -1871,6 +1871,10 @@ out:
 static int nand_write_page_raw(struct mtd_info *mtd, struct nand_chip *chip,
 				const uint8_t *buf, int oob_required)
 {
+#ifdef CONFIG_MTD_NAND_FSL_ON_DIE_ECC
+	unsigned char res;
+#endif
+
 	chip->write_buf(mtd, buf, mtd->writesize);
 	if (oob_required)
 		chip->write_buf(mtd, chip->oob_poi, mtd->oobsize);
@@ -1878,12 +1882,12 @@ static int nand_write_page_raw(struct mtd_info *mtd, struct nand_chip *chip,
 #ifdef CONFIG_MTD_NAND_FSL_ON_DIE_ECC
 	unsigned char res;
 	res=chip->waitfunc(mtd, chip);
-	if (res  & NAND_STATUS_FAIL) {
-		printk(KERN_INFO "Fatal Error\n");
+	if (res & NAND_STATUS_FAIL) {
+		pr_info("Fatal error\n");
 		mtd->ecc_stats.failed++;
 	}
-	else if (res  & NAND_STATUS_REWRITE_RECOMMENDED) {
-		printk(KERN_INFO "Rewrite Recommended\n");
+	else if (res & NAND_STATUS_REWRITE_RECOMMENDED) {
+		pr_info("Rewrite Recommended\n");
 		mtd->ecc_stats.failed++;
 	}
 #endif
