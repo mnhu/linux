@@ -55,7 +55,9 @@ static int of_mmc_spi_init(struct device *dev,
 {
 	struct of_mmc_spi *oms = to_of_mmc_spi(dev);
 
-	return request_threaded_irq(oms->detect_irq, NULL, irqhandler, 0,
+	return request_threaded_irq(oms->detect_irq, NULL, irqhandler,
+				    irq_get_trigger_type(oms->detect_irq) |
+				    IRQF_ONESHOT,
 				    dev_name(dev), mmc);
 }
 
