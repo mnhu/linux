@@ -104,9 +104,6 @@ knvram_partition_add(struct knvram_partition *p)
 {
 	int err=0;
 
-	INIT_LIST_HEAD(&p->lh);
-	list_add_tail(&p->lh, &knvram_partitions);
-
 	p->shadow = kmalloc(p->size, GFP_KERNEL);
 	if (!p->shadow) {
 		pr_err("%s: out of memory\n", __func__);
@@ -128,6 +125,9 @@ knvram_partition_add(struct knvram_partition *p)
 		pr_err("%s: read to shadow failed: %d\n", __func__, err);
 		goto fail_hw_read;
 	}
+
+	INIT_LIST_HEAD(&p->lh);
+	list_add_tail(&p->lh, &knvram_partitions);
 
 #ifdef CONFIG_KNVRAM_DEV
 	if (p->dev) {
@@ -151,6 +151,7 @@ knvram_partition_add(struct knvram_partition *p)
 	knvram_dev_unregister(p);
 fail_dev_register:
 #endif /* CONFIG_KNVRAM_DEV */
+	list_del_init(&p->lh);
 
 fail_hw_read:
 
