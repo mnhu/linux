@@ -399,6 +399,21 @@ static ssize_t gfar_set_bcrej_delay(struct device *dev,
 static DEVICE_ATTR(bcrej_delay, 0644, gfar_show_bcrej_delay,
 		   gfar_set_bcrej_delay);
 
+
+static ssize_t gfar_show_bcrej_events(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
+
+	return sprintf(buf, "%lu\n", priv->bcrej_events);
+}
+
+
+static DEVICE_ATTR(bcrej_events, 0444, gfar_show_bcrej_events,
+		   NULL);
+
+
 void gfar_init_sysfs(struct net_device *dev)
 {
 	struct gfar_private *priv = netdev_priv(dev);
@@ -421,6 +436,7 @@ void gfar_init_sysfs(struct net_device *dev)
 	rc |= device_create_file(&dev->dev, &dev_attr_bcrej_count);
 	rc |= device_create_file(&dev->dev, &dev_attr_bcrej_window);
 	rc |= device_create_file(&dev->dev, &dev_attr_bcrej_delay);
+	rc |= device_create_file(&dev->dev, &dev_attr_bcrej_events);
 
 	if (rc)
 		dev_err(&dev->dev, "Error creating gianfar sysfs files\n");

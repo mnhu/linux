@@ -236,7 +236,8 @@ static void bcrej_enable(struct gfar_private *priv)
 		return;
 	tempval |= RCTRL_BC_REJ;
 	gfar_write(&regs->rctrl, tempval);
-	pr_warning("%s: broadcast storm filter enabled\n", priv->ndev->name);
+	priv->bcrej_events++;
+
 	/* Schedule re-enable work */
 	if (delayed_work_pending(&priv->bcrej_work))
 		cancel_delayed_work_sync(&priv->bcrej_work);
@@ -255,7 +256,6 @@ static void bcrej_disable(struct work_struct *work)
 	tempval = gfar_read(&regs->rctrl);
 	tempval &= ~RCTRL_BC_REJ;
 	gfar_write(&regs->rctrl, tempval);
-	pr_info("%s: broadcast storm filter disabled\n", priv->ndev->name);
 }
 
 int bcrej_init(struct net_device *ndev)
@@ -841,6 +841,8 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 		priv->bcrej_delay = DIV_ROUND_UP((*bcrej_delay * HZ), 1000);
 	else
 		priv->bcrej_delay = HZ;
+
+	priv->bcrej_events = 0;
 
 	return 0;
 
@@ -2837,6 +2839,7 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 			priv->bcrej_time[priv->bcrej_ndx++] = now;
 			if (unlikely(priv->bcrej_ndx == priv->bcrej_cnt))
 				priv->bcrej_ndx = 0;
+
 			delta = ktime_us_delta(
 				now, priv->bcrej_time[priv->bcrej_ndx]);
 			if (delta < priv->bcrej_win)

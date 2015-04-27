@@ -1139,6 +1139,7 @@ struct gfar_private {
 	unsigned int bcrej_win;
 	struct delayed_work bcrej_work;
 	unsigned long bcrej_delay;
+	unsigned long bcrej_events;
 };
 
 
