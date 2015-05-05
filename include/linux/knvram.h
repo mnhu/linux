@@ -32,6 +32,7 @@
 
 #include <linux/list.h>
 #include <linux/of.h>
+#include <linux/semaphore.h>
 
 #define KNVRAM_PARTNAME_MAXLEN 31
 
@@ -43,7 +44,7 @@ struct knvram_partition {
 	size_t size;
 	struct mutex open_lock;
 	int handles;
-	int writer;
+	struct semaphore writer;
 	void * shadow;
 	struct rw_semaphore shadow_lock;
 	void * transaction;

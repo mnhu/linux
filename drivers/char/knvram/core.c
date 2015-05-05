@@ -141,6 +141,7 @@ knvram_partition_add(struct knvram_partition *p)
 #endif /* CONFIG_KNVRAM_DEV */
 
 	mutex_init(&p->open_lock);
+	sema_init(&p->writer, 1);
 	init_rwsem(&p->shadow_lock);
 	if (p->transaction)
 		mutex_init(&p->transaction_lock);
@@ -214,14 +215,16 @@ _knvram_open(struct knvram_partition *p, int flags)
 	struct knvram_handle * h = NULL;
 
 	if (KNVRAM_NONBLOCK & flags) {
-		if (!mutex_trylock(&p->open_lock))
-			return ERR_PTR(-EAGAIN);
-	} else
+		if ((KNVRAM_WRITE & flags) && down_trylock(&p->writer))
+			return ERR_PTR(-EBUSY);
+		if (!mutex_trylock(&p->open_lock)) {
+			err = -EAGAIN;
+			goto err_lock;
+		}
+	} else {
+		if ((KNVRAM_WRITE & flags) && down_interruptible(&p->writer))
+			return ERR_PTR(-ERESTARTSYS);
 		mutex_lock(&p->open_lock);
-
-	if ((KNVRAM_WRITE & flags) && p->writer) {
-		err = -EBUSY;
-		goto out;
 	}
 
 	if ((KNVRAM_AUTOT & flags) &&
@@ -240,10 +243,12 @@ _knvram_open(struct knvram_partition *p, int flags)
 	h->flags = flags;
 
 	p->handles++;
-	if (KNVRAM_WRITE & flags)
-		p->writer = 1;
+
 out:
 	mutex_unlock(&p->open_lock);
+err_lock:
+	if (KNVRAM_WRITE & flags)
+		up(&p->writer);
 	return err ? ERR_PTR(err) : h;
 }
 
@@ -284,8 +289,6 @@ knvram_close(struct knvram_handle *h)
 			goto out;
 	}
 
-	if (KNVRAM_WRITE & h->flags)
-		p->writer = 0;
 	p->handles--;
 
 	/* Write to underlying hardware on last close */
@@ -297,6 +300,9 @@ knvram_close(struct knvram_handle *h)
 			err = 0;
 		}
 	}
+
+	if (KNVRAM_WRITE & h->flags)
+		up(&p->writer);
 
 out:
 	mutex_unlock(&p->open_lock);
