@@ -57,7 +57,7 @@ struct ethtool_rx_list {
 };
 
 /* The maximum number of packets to be handled in one call of gfar_poll */
-#define GFAR_DEV_WEIGHT 64
+#define GFAR_DEV_WEIGHT 4
 
 /* Length for FCB */
 #define GMAC_FCB_LEN 8
