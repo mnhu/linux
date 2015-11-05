@@ -1136,6 +1136,15 @@ struct gfar_private {
 	/*Filer table*/
 	unsigned int ftp_rqfpr[MAX_FILER_IDX + 1];
 	unsigned int ftp_rqfcr[MAX_FILER_IDX + 1];
+
+	/* Broadcast storm filter */
+	unsigned int bcrej_cnt;
+	unsigned int bcrej_ndx;
+	ktime_t *bcrej_time;
+	unsigned int bcrej_win;
+	struct delayed_work bcrej_work;
+	unsigned long bcrej_delay;
+	unsigned long bcrej_events;
 };
 
 
@@ -1192,6 +1201,8 @@ void gfar_init_sysfs(struct net_device *dev);
 int gfar_set_features(struct net_device *dev, netdev_features_t features);
 void gfar_check_rx_parser_mode(struct gfar_private *priv);
 void gfar_vlan_mode(struct net_device *dev, netdev_features_t features);
+
+int bcrej_init(struct net_device *ndev);
 
 extern const struct ethtool_ops gfar_ethtool_ops;
 
