@@ -317,99 +317,102 @@ static ssize_t gfar_set_fifo_starve_off(struct device *dev,
 
 static DEVICE_ATTR(fifo_starve_off, 0644, gfar_show_fifo_starve_off,
 		   gfar_set_fifo_starve_off);
-static ssize_t gfar_show_bcrej_count(struct device *dev,
+static ssize_t gfar_show_framerej_count(struct device *dev,
 				     struct device_attribute *attr,
 				     char *buf)
 {
 	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
 
-	return sprintf(buf, "%d\n", priv->bcrej_cnt);
+	return sprintf(buf, "%d\n", priv->framerej_cnt);
 }
 
-static ssize_t gfar_set_bcrej_count(struct device *dev,
+static ssize_t gfar_set_framerej_count(struct device *dev,
 				    struct device_attribute *attr,
 				    const char *buf, size_t count)
 {
 	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
 
-	/* Changing bcrej_cnt after bcrej_time is allocated currently not
-	 * supported.  To do this, we would have to provide proper locking and
-	 * reinitialize bcrej_time. */
-	if (priv->bcrej_time) {
-		dev_err(dev, "Cannot change bcrej-count after filter has been enabled\n");
-		return -EBUSY;
-	}
-
-	priv->bcrej_cnt = simple_strtoul(buf, NULL, 0);
-
-	if (!priv->bcrej_time)
-		bcrej_init(to_net_dev(dev));
+	priv->framerej_cnt = simple_strtoul(buf, NULL, 0);
+	framerej_init(to_net_dev(dev));
 
 	return count;
 }
 
-static DEVICE_ATTR(bcrej_count, 0644, gfar_show_bcrej_count,
-		   gfar_set_bcrej_count);
+static DEVICE_ATTR(framerej_count, 0644, gfar_show_framerej_count,
+		   gfar_set_framerej_count);
 
-static ssize_t gfar_show_bcrej_window(struct device *dev,
+static ssize_t gfar_show_framerej_window(struct device *dev,
 				     struct device_attribute *attr,
 				     char *buf)
 {
 	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
 
-	return sprintf(buf, "%d\n", priv->bcrej_win / 1000);
+	return sprintf(buf, "%d\n", priv->framerej_win / 1000);
 }
 
-static ssize_t gfar_set_bcrej_window(struct device *dev,
+static ssize_t gfar_set_framerej_window(struct device *dev,
 				    struct device_attribute *attr,
 				    const char *buf, size_t count)
 {
 	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
 
-	priv->bcrej_win = simple_strtoul(buf, NULL, 0) * 1000;
+	priv->framerej_win = simple_strtoul(buf, NULL, 0) * 1000;
 
 	return count;
 }
 
-static DEVICE_ATTR(bcrej_window, 0644, gfar_show_bcrej_window,
-		   gfar_set_bcrej_window);
+static DEVICE_ATTR(framerej_window, 0644, gfar_show_framerej_window,
+		   gfar_set_framerej_window);
 
-static ssize_t gfar_show_bcrej_delay(struct device *dev,
+static ssize_t gfar_show_framerej_delay(struct device *dev,
 				     struct device_attribute *attr,
 				     char *buf)
 {
 	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
 
-	return sprintf(buf, "%lu\n", (priv->bcrej_delay * 1000) / HZ);
+	return sprintf(buf, "%lu\n", (priv->framerej_delay * 1000) / HZ);
 }
 
-static ssize_t gfar_set_bcrej_delay(struct device *dev,
+static ssize_t gfar_set_framerej_delay(struct device *dev,
 				    struct device_attribute *attr,
 				    const char *buf, size_t count)
 {
 	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
 	unsigned int num = simple_strtoul(buf, NULL, 0);
 
-	priv->bcrej_delay = num ? DIV_ROUND_UP(num * HZ, 1000) : HZ;
+	priv->framerej_delay = num ? DIV_ROUND_UP(num * HZ, 1000) : HZ;
 
 	return count;
 }
 
-static DEVICE_ATTR(bcrej_delay, 0644, gfar_show_bcrej_delay,
-		   gfar_set_bcrej_delay);
+static DEVICE_ATTR(framerej_delay, 0644, gfar_show_framerej_delay,
+		   gfar_set_framerej_delay);
 
 
-static ssize_t gfar_show_bcrej_events(struct device *dev,
+static ssize_t gfar_show_framerej_events(struct device *dev,
 				     struct device_attribute *attr,
 				     char *buf)
 {
 	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
 
-	return sprintf(buf, "%lu\n", priv->bcrej_events);
+	return sprintf(buf, "%lu\n", priv->framerej_events);
 }
 
 
-static DEVICE_ATTR(bcrej_events, 0444, gfar_show_bcrej_events,
+static DEVICE_ATTR(framerej_events, 0444, gfar_show_framerej_events,
+		   NULL);
+
+static ssize_t gfar_show_framerej_current(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	struct gfar_private *priv = netdev_priv(to_net_dev(dev));
+
+	return sprintf(buf, "%d\n", priv->framerej_cur);
+}
+
+
+static DEVICE_ATTR(framerej_current, 0444, gfar_show_framerej_current,
 		   NULL);
 
 
@@ -432,10 +435,11 @@ void gfar_init_sysfs(struct net_device *dev)
 	rc |= device_create_file(&dev->dev, &dev_attr_fifo_starve_off);
 
 	/* Create sysfs files for broadcast storm rejection filter */
-	rc |= device_create_file(&dev->dev, &dev_attr_bcrej_count);
-	rc |= device_create_file(&dev->dev, &dev_attr_bcrej_window);
-	rc |= device_create_file(&dev->dev, &dev_attr_bcrej_delay);
-	rc |= device_create_file(&dev->dev, &dev_attr_bcrej_events);
+	rc |= device_create_file(&dev->dev, &dev_attr_framerej_count);
+	rc |= device_create_file(&dev->dev, &dev_attr_framerej_window);
+	rc |= device_create_file(&dev->dev, &dev_attr_framerej_delay);
+	rc |= device_create_file(&dev->dev, &dev_attr_framerej_events);
+	rc |= device_create_file(&dev->dev, &dev_attr_framerej_current);
 
 	if (rc)
 		dev_err(&dev->dev, "Error creating gianfar sysfs files\n");

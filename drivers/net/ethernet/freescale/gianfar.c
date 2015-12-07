@@ -104,6 +104,8 @@
 #include "gianfar.h"
 
 #define TX_TIMEOUT      (1*HZ)
+#define gfar_halt_nodisable(dev) _gfar_halt_nodisable(dev, MODE_RX_TX)
+#define gfar_start(dev) _gfar_start(dev, MODE_RX_TX)
 
 const char gfar_driver_version[] = "1.3";
 
@@ -138,9 +140,9 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit);
 static void gfar_clean_tx_ring(struct gfar_priv_tx_q *tx_queue);
 static void gfar_process_frame(struct net_device *dev, struct sk_buff *skb,
 			       int amount_pull, struct napi_struct *napi);
-void gfar_halt(struct net_device *dev);
-static void gfar_halt_nodisable(struct net_device *dev);
-void gfar_start(struct net_device *dev);
+void _gfar_halt(struct net_device *dev, enum frame_mode mode);
+static void _gfar_halt_nodisable(struct net_device *dev, enum frame_mode mode);
+void _gfar_start(struct net_device *dev, enum frame_mode mode);
 static void gfar_clear_exact_match(struct net_device *dev);
 static void gfar_set_mac_for_addr(struct net_device *dev, int num,
 				  const u8 *addr);
@@ -228,53 +230,47 @@ static int gfar_init_bds(struct net_device *ndev)
 	return 0;
 }
 
-static void bcrej_enable(struct gfar_private *priv)
+static void framerej_enable(struct gfar_private *priv)
 {
-	struct gfar __iomem *regs = priv->gfargrp[0].regs;
-	u32 tempval;
+	/* If frame reject is not active, activate it it */
+	if (!priv->framerej_active) {
+		/* Disable receive of frames */
+		_gfar_halt(priv->ndev, MODE_RX_ONLY);
 
-	/* Enable broadcast frame reject */
-	tempval = gfar_read(&regs->rctrl);
-	if (tempval & RCTRL_BC_REJ)
-		return;
-	tempval |= RCTRL_BC_REJ;
-	gfar_write(&regs->rctrl, tempval);
-	priv->bcrej_events++;
+		/* Increment rejection event counter */
+		priv->framerej_events++;
 
-	/* Schedule re-enable work */
-	if (delayed_work_pending(&priv->bcrej_work))
-		cancel_delayed_work_sync(&priv->bcrej_work);
-	schedule_delayed_work(&priv->bcrej_work, priv->bcrej_delay);
+		/* Schedule re-enable work */
+		if (delayed_work_pending(&priv->framerej_work))
+			cancel_delayed_work_sync(&priv->framerej_work);
+
+		schedule_delayed_work(&priv->framerej_work, priv->framerej_delay);
+		priv->framerej_active = 1;
+	}
 }
 
-static void bcrej_disable(struct work_struct *work)
+static void framerej_disable(struct work_struct *work)
 {
 	struct gfar_private *priv = (struct gfar_private *)
 		container_of(to_delayed_work(work),
-			     struct gfar_private, bcrej_work);
-	struct gfar __iomem *regs = priv->gfargrp[0].regs;
-	u32 tempval;
+			     struct gfar_private, framerej_work);
 
-	/* Disable broadcast frame reject */
-	tempval = gfar_read(&regs->rctrl);
-	tempval &= ~RCTRL_BC_REJ;
-	gfar_write(&regs->rctrl, tempval);
+	/* Deactivate frame rejection filter */
+	_gfar_start(priv->ndev, MODE_RX_ONLY);
+	priv->framerej_active = 0;
 }
 
-int bcrej_init(struct net_device *ndev)
+int framerej_init(struct net_device *ndev)
 {
 	struct gfar_private *priv = netdev_priv(ndev);
 
-	if (!priv->bcrej_cnt)
-		/* disabled */
+	if (!priv->framerej_cnt)
 		return 0;
-	priv->bcrej_ndx = 0;
-	INIT_DELAYED_WORK(&priv->bcrej_work, bcrej_disable);
 
-	priv->bcrej_time = kzalloc(sizeof(*priv->bcrej_time)
-				   * priv->bcrej_cnt, GFP_KERNEL);
-	if (!priv->bcrej_time)
-		return -ENOMEM;
+	priv->framerej_cur = 0;
+	priv->framerej_time = ktime_get();
+
+	INIT_DELAYED_WORK(&priv->framerej_work, framerej_disable);
 
 	return 0;
 }
@@ -679,7 +675,7 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 	const u32 *stash_idx;
 	unsigned int num_tx_qs, num_rx_qs;
 	u32 *tx_queues, *rx_queues;
-	u32 *bcrej_cnt, *bcrej_win, *bcrej_delay;
+	u32 *framerej_cnt, *framerej_win, *framerej_delay;
 
 	if (!np || !of_device_is_available(np))
 		return -ENODEV;
@@ -834,17 +830,18 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 	/* Find the TBI PHY.  If it's not there, we don't support SGMII */
 	priv->tbi_node = of_parse_phandle(np, "tbi-handle", 0);
 
-	bcrej_cnt = (u32 *)of_get_property(np, "deif,bcrej-count", NULL);
-	priv->bcrej_cnt = bcrej_cnt ? *bcrej_cnt : 0;
-	bcrej_win = (u32 *)of_get_property(np, "deif,bcrej-window", NULL);
-	priv->bcrej_win = bcrej_win ? *bcrej_win * 1000 : 0;
-	bcrej_delay = (u32 *)of_get_property(np, "deif,bcrej-delay", NULL);
-	if (bcrej_delay)
-		priv->bcrej_delay = DIV_ROUND_UP((*bcrej_delay * HZ), 1000);
+	framerej_cnt = (u32 *)of_get_property(np, "deif,framerej-count", NULL);
+	priv->framerej_cnt = framerej_cnt ? *framerej_cnt : 0;
+	framerej_win = (u32 *)of_get_property(np, "deif,framerej-window", NULL);
+	priv->framerej_win = framerej_win ? *framerej_win * 1000 : 0;
+	framerej_delay = (u32 *)of_get_property(np, "deif,framerej-delay", NULL);
+	if (framerej_delay)
+		priv->framerej_delay = DIV_ROUND_UP((*framerej_delay * HZ), 1000);
 	else
-		priv->bcrej_delay = HZ;
+		priv->framerej_delay = HZ;
 
-	priv->bcrej_events = 0;
+	priv->framerej_events = 0;
+	priv->framerej_active = 0;
 
 	return 0;
 
@@ -1711,8 +1708,50 @@ static int __gfar_is_rx_idle(struct gfar_private *priv)
 	return 0;
 }
 
+static int gfar_halt_mode_get_dmactrl(enum frame_mode mode)
+{
+	switch (mode) {
+		case MODE_RX_TX:
+			return (DMACTRL_GRS | DMACTRL_GTS);
+		case MODE_RX_ONLY:
+			return DMACTRL_GRS;
+		case MODE_TX_ONLY:
+			return DMACTRL_GTS;
+	}
+
+	return (DMACTRL_GRS | DMACTRL_GTS);
+}
+
+static int gfar_halt_mode_get_ievent(enum frame_mode mode)
+{
+	switch (mode) {
+		case MODE_RX_TX:
+			return (IEVENT_GRSC | IEVENT_GTSC);
+		case MODE_RX_ONLY:
+			return IEVENT_GRSC;
+		case MODE_TX_ONLY:
+			return IEVENT_GTSC;
+	}
+
+	return (IEVENT_GRSC | IEVENT_GTSC);
+}
+
+static int gfar_halt_mode_get_mac_en(enum frame_mode mode)
+{
+	switch (mode) {
+		case MODE_RX_TX:
+			return (MACCFG1_RX_EN | MACCFG1_TX_EN);
+		case MODE_RX_ONLY:
+			return MACCFG1_RX_EN;
+		case MODE_TX_ONLY:
+			return MACCFG1_TX_EN;
+	}
+
+	return (MACCFG1_RX_EN | MACCFG1_TX_EN);
+}
+
 /* Halt the receive and transmit queues */
-static void gfar_halt_nodisable(struct net_device *dev)
+static void _gfar_halt_nodisable(struct net_device *dev, enum frame_mode mode)
 {
 	struct gfar_private *priv = netdev_priv(dev);
 	struct gfar __iomem *regs = NULL;
@@ -1731,17 +1770,17 @@ static void gfar_halt_nodisable(struct net_device *dev)
 	regs = priv->gfargrp[0].regs;
 	/* Stop the DMA, and wait for it to stop */
 	tempval = gfar_read(&regs->dmactrl);
-	if ((tempval & (DMACTRL_GRS | DMACTRL_GTS)) !=
-	    (DMACTRL_GRS | DMACTRL_GTS)) {
+	if ((tempval & gfar_halt_mode_get_dmactrl(mode)) !=
+	    gfar_halt_mode_get_dmactrl(mode)) {
 		int ret;
 
-		tempval |= (DMACTRL_GRS | DMACTRL_GTS);
+		tempval |= gfar_halt_mode_get_dmactrl(mode);
 		gfar_write(&regs->dmactrl, tempval);
 
 		do {
 			ret = spin_event_timeout(((gfar_read(&regs->ievent) &
-				 (IEVENT_GRSC | IEVENT_GTSC)) ==
-				 (IEVENT_GRSC | IEVENT_GTSC)), 1000000, 0);
+				 gfar_halt_mode_get_ievent(mode)) ==
+				 gfar_halt_mode_get_ievent(mode)), 1000000, 0);
 			if (!ret && !(gfar_read(&regs->ievent) & IEVENT_GRSC))
 				ret = __gfar_is_rx_idle(priv);
 		} while (!ret);
@@ -1749,19 +1788,20 @@ static void gfar_halt_nodisable(struct net_device *dev)
 }
 
 /* Halt the receive and transmit queues */
-void gfar_halt(struct net_device *dev)
+void _gfar_halt(struct net_device *dev, enum frame_mode mode)
 {
 	struct gfar_private *priv = netdev_priv(dev);
 	struct gfar __iomem *regs = priv->gfargrp[0].regs;
 	u32 tempval;
 
-	gfar_halt_nodisable(dev);
+	_gfar_halt_nodisable(dev, mode);
 
-	/* Disable Rx and Tx */
+	/* Disable Rx and/or Tx */
 	tempval = gfar_read(&regs->maccfg1);
-	tempval &= ~(MACCFG1_RX_EN | MACCFG1_TX_EN);
+	tempval &= ~gfar_halt_mode_get_mac_en(mode);
 	gfar_write(&regs->maccfg1, tempval);
 }
+
 
 static void free_grp_irqs(struct gfar_priv_grp *grp)
 {
@@ -1889,7 +1929,7 @@ static void free_skb_resources(struct gfar_private *priv)
 			  priv->tx_queue[0]->tx_bd_dma_base);
 }
 
-void gfar_start(struct net_device *dev)
+void _gfar_start(struct net_device *dev, enum frame_mode mode)
 {
 	struct gfar_private *priv = netdev_priv(dev);
 	struct gfar __iomem *regs = priv->gfargrp[0].regs;
@@ -1898,24 +1938,42 @@ void gfar_start(struct net_device *dev)
 
 	/* Enable Rx and Tx in MACCFG1 */
 	tempval = gfar_read(&regs->maccfg1);
-	tempval |= (MACCFG1_RX_EN | MACCFG1_TX_EN);
+	tempval |= gfar_halt_mode_get_mac_en(mode);
 	gfar_write(&regs->maccfg1, tempval);
 
 	/* Initialize DMACTRL to have WWR and WOP */
-	tempval = gfar_read(&regs->dmactrl);
-	tempval |= DMACTRL_INIT_SETTINGS;
-	gfar_write(&regs->dmactrl, tempval);
+	if (mode != MODE_RX_ONLY) {
+		tempval = gfar_read(&regs->dmactrl);
+		tempval |= DMACTRL_INIT_SETTINGS;
+		gfar_write(&regs->dmactrl, tempval);
+	}
 
 	/* Make sure we aren't stopped */
 	tempval = gfar_read(&regs->dmactrl);
-	tempval &= ~(DMACTRL_GRS | DMACTRL_GTS);
+	tempval &= ~gfar_halt_mode_get_dmactrl(mode);
 	gfar_write(&regs->dmactrl, tempval);
 
 	for (i = 0; i < priv->num_grps; i++) {
 		regs = priv->gfargrp[i].regs;
 		/* Clear THLT/RHLT, so that the DMA starts polling now */
-		gfar_write(&regs->tstat, priv->gfargrp[i].tstat);
-		gfar_write(&regs->rstat, priv->gfargrp[i].rstat);
+		switch (mode) {
+			case MODE_RX_TX:
+				gfar_write(&regs->tstat,
+					   priv->gfargrp[i].tstat);
+				gfar_write(&regs->rstat,
+					   priv->gfargrp[i].rstat);
+				break;
+
+			case MODE_RX_ONLY:
+				gfar_write(&regs->rstat,
+					   priv->gfargrp[i].rstat);
+				break;
+
+			case MODE_TX_ONLY:
+				gfar_write(&regs->tstat,
+					   priv->gfargrp[i].tstat);
+				break;
+	}
 		/* Unmask the interrupts we look for */
 		gfar_write(&regs->imask, IMASK_DEFAULT);
 	}
@@ -2032,7 +2090,7 @@ int startup_gfar(struct net_device *ndev)
 		gfar_write(&regs->imask, IMASK_INIT_CLEAR);
 	}
 
-	err = bcrej_init(ndev);
+	err = framerej_init(ndev);
 	if (err)
 		return err;
 
@@ -2701,6 +2759,30 @@ static void gfar_clean_tx_ring(struct gfar_priv_tx_q *tx_queue)
 	netdev_tx_completed_queue(txq, howmany, bytes_sent);
 }
 
+static int gfar_reject_filter(struct gfar_private *priv)
+{
+	/* Broadcast storm rejection filter */
+	if (likely(priv->framerej_cnt)) {
+		s64 delta = ktime_us_delta(ktime_get(), priv->framerej_time);
+
+		/* Increment frame */
+		priv->framerej_cur++;
+
+		/* If the amount of time has passed, reset counter */
+		if (unlikely(delta > priv->framerej_win)) {
+			priv->framerej_cur = 0;
+			priv->framerej_time = ktime_get();
+		}
+
+		/* Check if we have received too many telegrams */
+		if (unlikely(priv->framerej_cur >= priv->framerej_cnt)) {
+			framerej_enable(priv);
+			return 1;
+		}
+	}
+	return 0;
+}
+
 static void gfar_schedule_cleanup(struct gfar_priv_grp *gfargrp)
 {
 	unsigned long flags;
@@ -2875,6 +2957,7 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 	int amount_pull;
 	int howmany = 0;
 	struct gfar_private *priv = netdev_priv(dev);
+	int reject_filter_active = 0;
 
 	/* Get the first full descriptor */
 	bdp = rx_queue->cur_rx;
@@ -2887,20 +2970,8 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 
 		rmb();
 
-		/* Broadcast storm rejection filter */
-		if (unlikely((bdp->status & RXBD_BROADCAST)
-			     && priv->bcrej_time)) {
-			ktime_t now = ktime_get();
-			s64 delta;
-			priv->bcrej_time[priv->bcrej_ndx++] = now;
-			if (unlikely(priv->bcrej_ndx == priv->bcrej_cnt))
-				priv->bcrej_ndx = 0;
-
-			delta = ktime_us_delta(
-				now, priv->bcrej_time[priv->bcrej_ndx]);
-			if (delta < priv->bcrej_win)
-				bcrej_enable(priv);
-		}
+		/* frame filter reject */
+		reject_filter_active = gfar_reject_filter(priv);
 
 		/* Add another skb for the future */
 		newskb = gfar_new_skb(dev);
@@ -2914,9 +2985,12 @@ int gfar_clean_rx_ring(struct gfar_priv_rx_q *rx_queue, int rx_work_limit)
 			     bdp->length > priv->rx_buffer_size))
 			bdp->status = RXBD_LARGE;
 
-		/* We drop the frame if we failed to allocate a new buffer */
-		if (unlikely(!newskb || !(bdp->status & RXBD_LAST) ||
-			     bdp->status & RXBD_ERR)) {
+		/* We drop the frame if we failed to allocate a new buffer or
+		 * frame filter has been activated */
+		if (unlikely(reject_filter_active
+			     || !newskb
+			     || !(bdp->status & RXBD_LAST)
+			     || bdp->status & RXBD_ERR)) {
 			count_errors(bdp->status, dev);
 
 			if (unlikely(!newskb))

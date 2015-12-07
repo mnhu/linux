@@ -1138,13 +1138,14 @@ struct gfar_private {
 	unsigned int ftp_rqfcr[MAX_FILER_IDX + 1];
 
 	/* Broadcast storm filter */
-	unsigned int bcrej_cnt;
-	unsigned int bcrej_ndx;
-	ktime_t *bcrej_time;
-	unsigned int bcrej_win;
-	struct delayed_work bcrej_work;
-	unsigned long bcrej_delay;
-	unsigned long bcrej_events;
+	unsigned int framerej_cnt;
+	unsigned int framerej_cur;
+	unsigned int framerej_active;
+	ktime_t framerej_time;
+	unsigned int framerej_win;
+	struct delayed_work framerej_work;
+	unsigned long framerej_delay;
+	unsigned long framerej_events;
 };
 
 
@@ -1186,6 +1187,14 @@ static inline void gfar_read_filer(struct gfar_private *priv,
 	*fpr = gfar_read(&regs->rqfpr);
 }
 
+enum  frame_mode
+{
+	MODE_RX_TX,   	//default: halt both RX and TX
+	MODE_RX_ONLY,  	//frame rejection: halt only RX
+	MODE_TX_ONLY,  	//not used yet : halt only TX
+};
+#define gfar_halt(dev) _gfar_halt(dev, MODE_RX_TX)
+
 void lock_rx_qs(struct gfar_private *priv);
 void lock_tx_qs(struct gfar_private *priv);
 void unlock_rx_qs(struct gfar_private *priv);
@@ -1193,7 +1202,7 @@ void unlock_tx_qs(struct gfar_private *priv);
 irqreturn_t gfar_receive(int irq, void *dev_id);
 int startup_gfar(struct net_device *dev);
 void stop_gfar(struct net_device *dev);
-void gfar_halt(struct net_device *dev);
+void _gfar_halt(struct net_device *dev, enum frame_mode mode);
 void gfar_phy_test(struct mii_bus *bus, struct phy_device *phydev, int enable,
 		   u32 regnum, u32 read);
 void gfar_configure_coalescing_all(struct gfar_private *priv);
@@ -1202,7 +1211,7 @@ int gfar_set_features(struct net_device *dev, netdev_features_t features);
 void gfar_check_rx_parser_mode(struct gfar_private *priv);
 void gfar_vlan_mode(struct net_device *dev, netdev_features_t features);
 
-int bcrej_init(struct net_device *ndev);
+int framerej_init(struct net_device *ndev);
 
 extern const struct ethtool_ops gfar_ethtool_ops;
 
