@@ -81,6 +81,7 @@
 #include <linux/integrity.h>
 #include <linux/proc_ns.h>
 #include <linux/io.h>
+#include <linux/appwd.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -942,6 +943,8 @@ static int __ref kernel_init(void *unused)
 	numa_default_policy();
 
 	flush_delayed_fput();
+
+	appwd_init_post_hook();
 
 	if (ramdisk_execute_command) {
 		ret = run_init_process(ramdisk_execute_command);
