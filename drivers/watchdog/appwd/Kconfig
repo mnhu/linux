@@ -105,16 +105,16 @@ config APPWD_WDD_RECOVER_TIMEOUT
 	  after closing it or being killed with a SIGKILL signal.
 
 config APPWD_WDD_NOWAYOUT
-       bool "Disable magic close of watchdog devices"
-       depends on APPWD && !OF_APPWD
-       default no
-       help
-         By saying Y here, you will no longer be able to close the
-         user-space watchdog devices without causing the keep-alive
-         timeout to continue, thus most likely causing a reboot unless
-         you have setup the system to restart the application.
+	bool "Disable magic close of watchdog devices"
+	depends on APPWD && !OF_APPWD
+	default no
+	help
+	  By saying Y here, you will no longer be able to close the
+	  user-space watchdog devices without causing the keep-alive
+	  timeout to continue, thus most likely causing a reboot unless
+	  you have setup the system to restart the application.
 
-	 Say N here, unless you know what you are doing.
+	  Say N here, unless you know what you are doing.
 
 config APPWD_MAX_WDT
 	int "Maximum concurrent watchdog timers"
@@ -153,7 +153,7 @@ config APPWD_WDT_MPC8xxx
 	  Freescale MPC8xx, MPC83xx and MPC85xx processors.
 
 config APPWD_WDT_IMX2
-	bool " IMX Appliance Watchdog Timer support"
+	bool "IMX Appliance Watchdog Timer support"
 	depends on !IMX2_WDT && ARCH_MXC
 	select APPWD_WDM
 	help
@@ -161,9 +161,9 @@ config APPWD_WDT_IMX2
 	  on the Freescale IMX2 and later processors.
 
 config APPWD_WDT_OMAP
-        bool " OMAP Appliance Watchdog Timer support"
-        depends on !OMAP_WDT && (ARCH_OMAP16XX || ARCH_OMAP2PLUS)
-        select APPWD_WDM
+	bool "OMAP Appliance Watchdog Timer support"
+	depends on !OMAP_WDT && (ARCH_OMAP16XX || ARCH_OMAP2PLUS)
+	select APPWD_WDM
 	help
 	  This is the application driver for the hardware watchdog
 	  on the OMAP16 and OMAP2PLUS processors.
