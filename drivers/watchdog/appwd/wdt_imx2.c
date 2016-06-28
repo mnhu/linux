@@ -30,6 +30,8 @@
 #include <linux/of_address.h>
 #include <linux/io.h>
 #include <linux/module.h>
+#include <linux/reboot.h>
+#include <linux/delay.h>
 
 #include "appwd_int.h"
 
@@ -51,15 +53,40 @@
 
 #define WDOG_SEC_TO_COUNT(s)	((s * 2 - 1) << 8)
 
-static struct {
+static struct imx2_wdt {
 	struct clk *clk;
 	void __iomem *base;
+	struct notifier_block restart_handler;
 } imx2_wdt;
 
 struct wdt_imx2_data {
 	int heartbeat;
 	u32 timeout_ms;
 };
+
+static int imx2_restart_handler(struct notifier_block *this, unsigned long mode,
+				void *cmd)
+{
+	unsigned int wcr_enable = IMX2_WDT_WCR_WDE;
+	struct imx2_wdt *wdev = container_of(this, struct imx2_wdt, restart_handler);
+	/* Assert SRS signal */
+	__raw_writew(wcr_enable, wdev->base + IMX2_WDT_WCR);
+
+	/*
+	 * Due to imx6q errata ERR004346 (WDOG: WDOG SRS bit requires to be
+	 * written twice), we add another two writes to ensure there must be at
+	 * least two writes happen in the same one 32kHz clock period.  We save
+	 * the target check here, since the writes shouldn't be a huge burden
+	 * for other platforms.
+	 */
+	__raw_writew(wcr_enable, wdev->base + IMX2_WDT_WCR);
+	__raw_writew(wcr_enable, wdev->base + IMX2_WDT_WCR);
+
+	/* wait for reset to assert... */
+	mdelay(500);
+
+	return NOTIFY_DONE;
+}
 
 
 static void wdt_imx2_keepalive(void *base)
@@ -165,6 +192,12 @@ wdt_imx2_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to register wdt_imx2: %d\n", err);
 		goto appwd_wdt_register_failed;
 	}
+
+	imx2_wdt.restart_handler.notifier_call = imx2_restart_handler;
+	imx2_wdt.restart_handler.priority = 128;
+	err = register_restart_handler(&imx2_wdt.restart_handler);
+	if (err)
+		dev_err(&pdev->dev, "cannot register restart handler\n");
 
 	return 0;
 
